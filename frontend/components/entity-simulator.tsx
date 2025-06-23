@@ -8,9 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Send, Palette } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import type { RGBWColor, SimulatePayload } from "@/types/led-config"
+import type { RGBWColor } from "@/types/led-config"
 import { toRgbwHex, fromRgbwHex } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+
+// Backend simulation payload format
+interface BackendSimulatePayload {
+  entity_id: string
+  r: number
+  g: number
+  b: number
+  w: number
+}
 
 export function EntitySimulator() {
   const [entityId, setEntityId] = useState("")
@@ -35,9 +44,13 @@ export function EntitySimulator() {
       return
     }
 
-    const payload: SimulatePayload = {
-      entityId: entityId.trim(),
-      color,
+    // Convert to backend format
+    const payload: BackendSimulatePayload = {
+      entity_id: entityId.trim(),
+      r: color.r,
+      g: color.g,
+      b: color.b,
+      w: color.w,
     }
 
     setLoading(true)
@@ -90,10 +103,11 @@ export function EntitySimulator() {
             <Label htmlFor="entity-id">Entity ID</Label>
             <Input
               id="entity-id"
-              placeholder="entity_001"
+              placeholder="projecteur"
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground mt-1">Use the same entity ID as configured in your mappings</p>
           </div>
 
           {/* Color Picker */}
@@ -167,6 +181,28 @@ export function EntitySimulator() {
             <Send className="h-4 w-4 mr-2" />
             {loading ? "Sending..." : "Send Color Update"}
           </Button>
+
+          {/* Backend Format Info */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="text-xs text-muted-foreground p-3 bg-muted rounded">
+              <p>
+                <strong>Backend payload:</strong>
+              </p>
+              <pre>
+                {JSON.stringify(
+                  {
+                    entity_id: entityId || "projecteur",
+                    r: color.r,
+                    g: color.g,
+                    b: color.b,
+                    w: color.w,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </div>
+          )}
         </CardContent>
       </Card>
 

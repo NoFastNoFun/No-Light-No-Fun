@@ -1,0 +1,19 @@
+{
+  "mappings": [
+    {
+      "entity_id": "0",
+      "controller_ip": "192.168.1.45",
+      "universe": 200,
+      "channel_start": 0,
+      "channel_count": 3,
+      "use_r": false,
+      "use_g": false,
+      "use_b": false,
+      "use_w": false
+    }
+  ],
+  "patches": null,
+  "udp_port": 0,
+  "default_universe": 0,
+  "max_fps": 0
+}

@@ -4,135 +4,157 @@
 
 /** Base WebSocket message */
 export interface WSMessage {
-  type: string
+  type: string;
 }
 
 /** Config packet message from eHub */
 export interface ConfigPacketMessage extends WSMessage {
-  type: "cfg"
-  len: number
+  type: "cfg";
+  len: number;
 }
 
 /** Art-Net message summary */
 export interface ArtNetMessage extends WSMessage {
-  ip: string
-  universe: number
-  channels: number
-  ts: number
+  ip: string;
+  universe: number;
+  channels: number;
+  ts: number;
 }
 
 /** RGBW color values */
 export interface RGBWColor {
-  r: number
-  g: number
-  b: number
-  w: number
+  r: number;
+  g: number;
+  b: number;
+  w: number;
 }
 
 /** Channel flags for RGBW */
 export interface ChannelFlags {
-  r: boolean
-  g: boolean
-  b: boolean
-  w: boolean
+  r: boolean;
+  g: boolean;
+  b: boolean;
+  w: boolean;
 }
 
-/** Entity mapping configuration */
+/** Entity mapping configuration (Frontend format) */
 export interface Mapping {
-  entityId: string
-  ip: string
-  universe: number
-  startChannel: number
-  flags: ChannelFlags
+  entityId: string;
+  ip: string;
+  universe: number;
+  startChannel: number;
+  flags: ChannelFlags;
 }
 
-/** Complete configuration */
+/** Complete configuration (Frontend format) */
 export interface Config {
-  mappings: Mapping[]
+  mappings: Mapping[];
+}
+
+/** Backend mapping format (snake_case) */
+export interface BackendMapping {
+  entity_id: string;
+  controller_ip: string;
+  universe: number;
+  channel_start: number;
+  channel_count: number;
+  use_r: boolean;
+  use_g: boolean;
+  use_b: boolean;
+  use_w: boolean;
+}
+
+/** Backend configuration format (snake_case) */
+export interface BackendConfig {
+  mappings: BackendMapping[];
+  patches: any;
+  udp_port: number;
+  default_universe: number;
+  max_fps: number;
 }
 
 /** Patch map entry */
 export interface PatchEntry {
-  fromChannel: number
-  toChannel: number
+  fromChannel: number;
+  toChannel: number;
 }
 
 /** Simulation payload */
 export interface SimulatePayload {
-  entityId: string
-  color: RGBWColor
+  entityId: string;
+  color: RGBWColor;
 }
 
 /** Configuration for a single receiver (LED controller) */
 export interface ReceiverConfig {
-  id: string
-  name: string
-  ipAddress: string
-  port: number
-  connected: boolean
-  lastSeen?: Date
+  id: string;
+  name: string;
+  ipAddress: string;
+  port: number;
+  connected: boolean;
+  lastSeen?: Date;
 }
 
 /** Configuration for a single controllable entity (LED strip, panel, etc.) */
 export interface EntityConfig {
-  id: string
-  name: string
-  receiverId: string
-  type: string
-  enabled: boolean
-  dmxConfig: DMXConfig
-  currentColor: RGBWColor
+  id: string;
+  name: string;
+  receiverId: string;
+  type: string;
+  enabled: boolean;
+  dmxConfig: DMXConfig;
+  currentColor: RGBWColor;
 }
 
 /** DMX configuration for an entity */
 export interface DMXConfig {
-  universe: number
-  startChannel: number
-  channelCount: number
-  rgbwFilter: RGBWFilter
+  universe: number;
+  startChannel: number;
+  channelCount: number;
+  rgbwFilter: RGBWFilter;
 }
 
 /** RGBW color filter */
 export interface RGBWFilter {
-  redMultiplier: number
-  greenMultiplier: number
-  blueMultiplier: number
-  whiteMultiplier: number
-  enabled: boolean
+  redMultiplier: number;
+  greenMultiplier: number;
+  blueMultiplier: number;
+  whiteMultiplier: number;
+  enabled: boolean;
 }
 
 /** Patch map entry for channel remapping */
 export interface PatchMap {
-  id: string
-  name: string
-  entries: PatchEntry[]
+  id: string;
+  name: string;
+  entries: PatchEntry[];
 }
 
 /** System-wide settings */
 export interface SystemSettings {
-  websocketUrl: string
-  apiBaseUrl: string
-  autoReconnect: boolean
-  monitoringInterval: number
-  maxLogEntries: number
+  websocketUrl: string;
+  apiBaseUrl: string;
+  autoReconnect: boolean;
+  monitoringInterval: number;
+  maxLogEntries: number;
 }
 
 /** Complete system configuration */
 export interface SystemConfig {
-  receivers: ReceiverConfig[]
-  entities: EntityConfig[]
-  patchMaps: PatchMap[]
-  activePatchMapId?: string
-  settings: SystemSettings
+  receivers: ReceiverConfig[];
+  entities: EntityConfig[];
+  patchMaps: PatchMap[];
+  activePatchMapId?: string;
+  settings: SystemSettings;
 }
 
 export interface ConfigExport {
-  version: string
-  exportedAt: Date
-  config: SystemConfig
+  version: string;
+  exportedAt: Date;
+  config: SystemConfig;
   metadata: {
-    receiverCount: number
-    entityCount: number
-    patchMapCount: number
-  }
+    receiverCount: number;
+    entityCount: number;
+    patchMapCount: number;
+  };
 }

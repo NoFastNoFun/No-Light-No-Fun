@@ -15,6 +15,7 @@ import (
 	"nolightnofun/utils"
 )
 
+// ArtNetSummary is streamed to WebSocket clients.
 type ArtNetSummary struct {
 	IP        string `json:"ip"`
 	Universe  int    `json:"universe"`
@@ -29,30 +30,32 @@ type Engine struct {
 }
 
 func NewEngine(state *models.EntityState, cfg *models.Config) *Engine {
-	e := &Engine{
-		State:  state,
-		Config: cfg,
+	return &Engine{
+		State:     state,
+		Config:    cfg,
+		ThrottleF: utils.ThrottleFPS(func() { stateTick(state, cfg) }, cfg.MaxFPS),
 	}
-	e.ThrottleF = utils.ThrottleFPS(e.tick, cfg.MaxFPS)
-	return e
 }
 
+// NotifyChange schedules a DMX tick respecting FPS throttle.
 func (e *Engine) NotifyChange() { e.ThrottleF() }
 
 // ---------------------------------------------------------------------------
-// Packet parsing
+// Packet parsing helpers
 
+// ParseSmallUpdate handles 6-byte eHuB update packets.
 func (e *Engine) ParseSmallUpdate(buf []byte) bool {
 	if len(buf) != 6 {
 		return false
 	}
-	id := int(binary.BigEndian.Uint16(buf[:2]))
+	idStr := strconv.Itoa(int(binary.BigEndian.Uint16(buf[:2])))
 	col := models.Color{R: buf[2], G: buf[3], B: buf[4], W: buf[5]}
-	e.State.Set(id, col)
+	e.State.Set(idStr, col)
 	e.NotifyChange()
 	return true
 }
 
+// ParseConfigPacket placeholder (unchanged)
 func (e *Engine) ParseConfigPacket(buf []byte) bool {
 	if len(buf) < 1 || buf[0] != 0xC0 {
 		return false
@@ -63,13 +66,13 @@ func (e *Engine) ParseConfigPacket(buf []byte) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Routing tick
+// DMX tick logic (private)
 
-func (e *Engine) tick() {
+func stateTick(state *models.EntityState, cfg *models.Config) {
 	dmx := make([]byte, 512)
-	snap := e.State.Snapshot()
+	snap := state.Snapshot()
 
-	for _, m := range e.Config.Mappings {
+	for _, m := range cfg.Mappings {
 		col, ok := snap[m.EntityID]
 		if !ok {
 			continue
@@ -92,12 +95,12 @@ func (e *Engine) tick() {
 		}
 	}
 
-	if len(e.Config.Patches) > 0 {
-		dmx = patchmap.ApplyPatchMap(dmx, e.Config.Patches)
+	if len(cfg.Patches) > 0 {
+		dmx = patchmap.ApplyPatchMap(dmx, cfg.Patches)
 	}
 
 	sent := map[string]bool{}
-	for _, m := range e.Config.Mappings {
+	for _, m := range cfg.Mappings {
 		if sent[m.ControllerIP] {
 			continue
 		}

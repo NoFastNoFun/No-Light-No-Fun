@@ -1,11 +1,5 @@
 package models
 
-// Entity represents a Unity emitter entity.
-type Entity struct {
-	ID    int   `json:"id"`
-	Color Color `json:"color"`
-}
-
 // Color represents an RGBW colour value.
 type Color struct {
 	R byte `json:"r"`
@@ -14,9 +8,9 @@ type Color struct {
 	W byte `json:"w"`
 }
 
-// Mapping links one Entity to output channels on a controller.
+// Mapping links one named Entity to output channels on a controller.
 type Mapping struct {
-	EntityID     int    `json:"entity_id"`
+	EntityID     string `json:"entity_id"` // now string
 	ControllerIP string `json:"controller_ip"`
 	Universe     int    `json:"universe"`
 	ChannelStart int    `json:"channel_start"`
@@ -39,5 +33,5 @@ type Config struct {
 	Patches         []Patch   `json:"patches"`
 	Port            int       `json:"udp_port"`
 	DefaultUniverse int       `json:"default_universe"`
-	MaxFPS          int       `json:"max_fps"` // Throttle for Art-Net (25 default)
+	MaxFPS          int       `json:"max_fps"` // Throttle (25 default)
 }
