@@ -3,6 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useReducer, useCallback } from "react"
 import type { SystemConfig, ReceiverConfig, EntityConfig, PatchMap, SystemSettings } from "@/types/led-config"
+import { apiFetch } from "@/lib/api"
 
 /**
  * LED Configuration Context State
@@ -63,12 +64,31 @@ const defaultConfig: SystemConfig = {
   patchMaps: [],
   activePatchMapId: undefined,
   settings: {
-    websocketUrl: "ws://localhost:8080/ws",
-    apiBaseUrl: "http://localhost:8080/api",
+    websocketUrl: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/api/ws",
+    apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080",
     autoReconnect: true,
     monitoringInterval: 1000,
     maxLogEntries: 1000,
   },
+}
+
+/**
+ * Create safe config from potentially unsafe data
+ */
+function createSafeConfig(data: any): SystemConfig {
+  return {
+    receivers: Array.isArray(data?.receivers) ? data.receivers : [],
+    entities: Array.isArray(data?.entities) ? data.entities : [],
+    patchMaps: Array.isArray(data?.patchMaps) ? data.patchMaps : [],
+    activePatchMapId: data?.activePatchMapId || undefined,
+    settings: {
+      websocketUrl: data?.settings?.websocketUrl || defaultConfig.settings.websocketUrl,
+      apiBaseUrl: data?.settings?.apiBaseUrl || defaultConfig.settings.apiBaseUrl,
+      autoReconnect: data?.settings?.autoReconnect ?? defaultConfig.settings.autoReconnect,
+      monitoringInterval: data?.settings?.monitoringInterval || defaultConfig.settings.monitoringInterval,
+      maxLogEntries: data?.settings?.maxLogEntries || defaultConfig.settings.maxLogEntries,
+    },
+  }
 }
 
 /**
@@ -83,14 +103,14 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
       return { ...state, error: action.payload }
 
     case "SET_CONFIG":
-      return { ...state, config: action.payload, loading: false, error: null }
+      return { ...state, config: createSafeConfig(action.payload), loading: false, error: null }
 
     case "ADD_RECEIVER":
       return {
         ...state,
         config: {
           ...state.config,
-          receivers: [...state.config.receivers, action.payload],
+          receivers: [...(state.config?.receivers || []), action.payload],
         },
       }
 
@@ -99,7 +119,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          receivers: state.config.receivers.map((r) => (r.id === action.payload.id ? action.payload : r)),
+          receivers: (state.config?.receivers || []).map((r) => (r?.id === action.payload?.id ? action.payload : r)),
         },
       }
 
@@ -108,8 +128,8 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          receivers: state.config.receivers.filter((r) => r.id !== action.payload),
-          entities: state.config.entities.filter((e) => e.receiverId !== action.payload),
+          receivers: (state.config?.receivers || []).filter((r) => r?.id !== action.payload),
+          entities: (state.config?.entities || []).filter((e) => e?.receiverId !== action.payload),
         },
       }
 
@@ -118,7 +138,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          entities: [...state.config.entities, action.payload],
+          entities: [...(state.config?.entities || []), action.payload],
         },
       }
 
@@ -127,7 +147,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          entities: state.config.entities.map((e) => (e.id === action.payload.id ? action.payload : e)),
+          entities: (state.config?.entities || []).map((e) => (e?.id === action.payload?.id ? action.payload : e)),
         },
       }
 
@@ -136,7 +156,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          entities: state.config.entities.filter((e) => e.id !== action.payload),
+          entities: (state.config?.entities || []).filter((e) => e?.id !== action.payload),
         },
       }
 
@@ -145,7 +165,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          patchMaps: [...state.config.patchMaps, action.payload],
+          patchMaps: [...(state.config?.patchMaps || []), action.payload],
         },
       }
 
@@ -154,7 +174,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          patchMaps: state.config.patchMaps.map((p) => (p.id === action.payload.id ? action.payload : p)),
+          patchMaps: (state.config?.patchMaps || []).map((p) => (p?.id === action.payload?.id ? action.payload : p)),
         },
       }
 
@@ -163,9 +183,9 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          patchMaps: state.config.patchMaps.filter((p) => p.id !== action.payload),
+          patchMaps: (state.config?.patchMaps || []).filter((p) => p?.id !== action.payload),
           activePatchMapId:
-            state.config.activePatchMapId === action.payload ? undefined : state.config.activePatchMapId,
+            state.config?.activePatchMapId === action.payload ? undefined : state.config?.activePatchMapId,
         },
       }
 
@@ -183,7 +203,7 @@ function ledConfigReducer(state: LEDConfigState, action: LEDConfigAction): LEDCo
         ...state,
         config: {
           ...state.config,
-          settings: { ...state.config.settings, ...action.payload },
+          settings: { ...(state.config?.settings || defaultConfig.settings), ...action.payload },
         },
       }
 
@@ -208,16 +228,14 @@ export function LEDConfigProvider({ children }: { children: React.ReactNode }) {
   const loadConfig = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true })
     try {
-      const response = await fetch(`${state.config.settings.apiBaseUrl}/config`)
-      if (!response.ok) {
-        throw new Error(`Failed to load config: ${response.statusText}`)
-      }
-      const data = await response.json()
+      const data = await apiFetch<SystemConfig>("config")
       dispatch({ type: "SET_CONFIG", payload: data })
     } catch (error) {
+      // Set safe default config on error
+      dispatch({ type: "SET_CONFIG", payload: defaultConfig })
       dispatch({ type: "SET_ERROR", payload: error instanceof Error ? error.message : "Unknown error" })
     }
-  }, [state.config.settings.apiBaseUrl])
+  }, [])
 
   /**
    * Save configuration to API
@@ -225,14 +243,10 @@ export function LEDConfigProvider({ children }: { children: React.ReactNode }) {
   const saveConfig = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true })
     try {
-      const response = await fetch(`${state.config.settings.apiBaseUrl}/config`, {
+      await apiFetch<void>("config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(state.config),
+        body: JSON.stringify(state.config || defaultConfig),
       })
-      if (!response.ok) {
-        throw new Error(`Failed to save config: ${response.statusText}`)
-      }
       dispatch({ type: "SET_LOADING", payload: false })
     } catch (error) {
       dispatch({ type: "SET_ERROR", payload: error instanceof Error ? error.message : "Unknown error" })

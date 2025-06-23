@@ -10,6 +10,7 @@ import { Send, Palette } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { RGBWColor, SimulatePayload } from "@/types/led-config"
 import { toRgbwHex, fromRgbwHex } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
 
 export function EntitySimulator() {
   const [entityId, setEntityId] = useState("")
@@ -41,17 +42,11 @@ export function EntitySimulator() {
 
     setLoading(true)
     try {
-      const response = await fetch("/api/simulate", {
+      await apiFetch<void>("simulate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
-      if (response.ok) {
-        toast({ title: `Simulation sent for ${entityId}` })
-      } else {
-        throw new Error("Failed to send simulation")
-      }
+      toast({ title: `Simulation sent for ${entityId}` })
     } catch (error) {
       toast({
         title: "Error sending simulation",

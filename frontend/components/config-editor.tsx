@@ -10,6 +10,7 @@ import { Trash2, Plus, Save, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { Config, Mapping } from "@/types/led-config"
 import { validateIp, validateUniverse, validateChannel } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
 
 export function ConfigEditor() {
   const [config, setConfig] = useState<Config>({ mappings: [] })
@@ -26,15 +27,16 @@ export function ConfigEditor() {
   const loadConfig = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/config")
-      if (response.ok) {
-        const data = await response.json()
-        setConfig(data)
-        toast({ title: "Config loaded successfully" })
-      } else {
-        throw new Error("Failed to load config")
+      const data = await apiFetch<Config>("config")
+      // Handle null/undefined response or missing mappings array
+      const safeConfig: Config = {
+        mappings: Array.isArray(data?.mappings) ? data.mappings : [],
       }
+      setConfig(safeConfig)
+      toast({ title: "Config loaded successfully" })
     } catch (error) {
+      // Set safe default on error
+      setConfig({ mappings: [] })
       toast({
         title: "Error loading config",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -48,17 +50,11 @@ export function ConfigEditor() {
   const saveConfig = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/config", {
+      await apiFetch<void>("config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       })
-
-      if (response.ok) {
-        toast({ title: "Config saved successfully" })
-      } else {
-        throw new Error("Failed to save config")
-      }
+      toast({ title: "Config saved successfully" })
     } catch (error) {
       toast({
         title: "Error saving config",
@@ -100,7 +96,7 @@ export function ConfigEditor() {
     }
 
     setConfig((prev) => ({
-      mappings: [...prev.mappings, mapping],
+      mappings: [...(prev?.mappings || []), mapping],
     }))
 
     setNewMapping({
@@ -114,19 +110,22 @@ export function ConfigEditor() {
 
   const removeMapping = (index: number) => {
     setConfig((prev) => ({
-      mappings: prev.mappings.filter((_, i) => i !== index),
+      mappings: (prev?.mappings || []).filter((_, i) => i !== index),
     }))
   }
 
   const updateMapping = (index: number, updates: Partial<Mapping>) => {
     setConfig((prev) => ({
-      mappings: prev.mappings.map((mapping, i) => (i === index ? { ...mapping, ...updates } : mapping)),
+      mappings: (prev?.mappings || []).map((mapping, i) => (i === index ? { ...mapping, ...updates } : mapping)),
     }))
   }
 
   useEffect(() => {
     loadConfig()
   }, [])
+
+  // Safe access to mappings array
+  const mappings = config?.mappings || []
 
   return (
     <div className="space-y-6">
@@ -232,31 +231,31 @@ export function ConfigEditor() {
       {/* Existing Mappings */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Mappings ({config.mappings.length})</CardTitle>
+          <CardTitle>Current Mappings ({mappings.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {config.mappings.length === 0 ? (
+          {mappings.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
               No mappings configured. Add a mapping to get started.
             </p>
           ) : (
             <div className="space-y-4">
-              {config.mappings.map((mapping, index) => (
+              {mappings.map((mapping, index) => (
                 <div key={index} className="flex items-center gap-4 p-4 border rounded-lg">
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <Label className="text-xs text-muted-foreground">Entity ID</Label>
                       <Input
-                        value={mapping.entityId}
+                        value={mapping?.entityId || ""}
                         onChange={(e) => updateMapping(index, { entityId: e.target.value })}
                       />
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">IP Address</Label>
                       <Input
-                        value={mapping.ip}
+                        value={mapping?.ip || ""}
                         onChange={(e) => updateMapping(index, { ip: e.target.value })}
-                        className={!validateIp(mapping.ip) ? "border-red-500" : ""}
+                        className={mapping?.ip && !validateIp(mapping.ip) ? "border-red-500" : ""}
                       />
                     </div>
                     <div>
@@ -265,7 +264,7 @@ export function ConfigEditor() {
                         type="number"
                         min="1"
                         max="32768"
-                        value={mapping.universe}
+                        value={mapping?.universe || ""}
                         onChange={(e) => updateMapping(index, { universe: Number.parseInt(e.target.value) || 1 })}
                       />
                     </div>
@@ -275,7 +274,7 @@ export function ConfigEditor() {
                         type="number"
                         min="1"
                         max="512"
-                        value={mapping.startChannel}
+                        value={mapping?.startChannel || ""}
                         onChange={(e) => updateMapping(index, { startChannel: Number.parseInt(e.target.value) || 1 })}
                       />
                     </div>
@@ -287,10 +286,10 @@ export function ConfigEditor() {
                       {(["r", "g", "b", "w"] as const).map((flag) => (
                         <div key={flag} className="flex items-center space-x-1">
                           <Checkbox
-                            checked={mapping.flags[flag]}
+                            checked={mapping?.flags?.[flag] || false}
                             onCheckedChange={(checked) =>
                               updateMapping(index, {
-                                flags: { ...mapping.flags, [flag]: checked },
+                                flags: { ...mapping?.flags, [flag]: checked },
                               })
                             }
                           />

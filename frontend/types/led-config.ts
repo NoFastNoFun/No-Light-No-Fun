@@ -2,6 +2,67 @@
  * Types for LED routing system configuration
  */
 
+/** Base WebSocket message */
+export interface WSMessage {
+  type: string
+}
+
+/** Config packet message from eHub */
+export interface ConfigPacketMessage extends WSMessage {
+  type: "cfg"
+  len: number
+}
+
+/** Art-Net message summary */
+export interface ArtNetMessage extends WSMessage {
+  ip: string
+  universe: number
+  channels: number
+  ts: number
+}
+
+/** RGBW color values */
+export interface RGBWColor {
+  r: number
+  g: number
+  b: number
+  w: number
+}
+
+/** Channel flags for RGBW */
+export interface ChannelFlags {
+  r: boolean
+  g: boolean
+  b: boolean
+  w: boolean
+}
+
+/** Entity mapping configuration */
+export interface Mapping {
+  entityId: string
+  ip: string
+  universe: number
+  startChannel: number
+  flags: ChannelFlags
+}
+
+/** Complete configuration */
+export interface Config {
+  mappings: Mapping[]
+}
+
+/** Patch map entry */
+export interface PatchEntry {
+  fromChannel: number
+  toChannel: number
+}
+
+/** Simulation payload */
+export interface SimulatePayload {
+  entityId: string
+  color: RGBWColor
+}
+
 /** Configuration for a single receiver (LED controller) */
 export interface ReceiverConfig {
   id: string
@@ -47,11 +108,6 @@ export interface PatchMap {
   entries: PatchEntry[]
 }
 
-export interface PatchEntry {
-  fromChannel: number
-  toChannel: number
-}
-
 /** System-wide settings */
 export interface SystemSettings {
   websocketUrl: string
@@ -68,14 +124,6 @@ export interface SystemConfig {
   patchMaps: PatchMap[]
   activePatchMapId?: string
   settings: SystemSettings
-}
-
-/** RGBW color values */
-export interface RGBWColor {
-  r: number
-  g: number
-  b: number
-  w: number
 }
 
 export interface ConfigExport {

@@ -10,6 +10,7 @@ export function cn(...inputs: ClassValue[]) {
  * Validate IP address format
  */
 export function validateIp(ip: string): boolean {
+  if (!ip || typeof ip !== "string") return false
   const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
   return ipRegex.test(ip)
 }
@@ -18,7 +19,13 @@ export function validateIp(ip: string): boolean {
  * Convert RGBW to hex string
  */
 export function toRgbwHex(color: RGBWColor): string {
-  const toHex = (n: number) => n.toString(16).padStart(2, "0")
+  if (!color || typeof color !== "object") {
+    return "#00000000"
+  }
+  const toHex = (n: number) => {
+    const safe = Math.max(0, Math.min(255, n || 0))
+    return safe.toString(16).padStart(2, "0")
+  }
   return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}${toHex(color.w)}`
 }
 
@@ -26,6 +33,9 @@ export function toRgbwHex(color: RGBWColor): string {
  * Convert hex string to RGBW
  */
 export function fromRgbwHex(hex: string): RGBWColor {
+  if (!hex || typeof hex !== "string") {
+    return { r: 0, g: 0, b: 0, w: 0 }
+  }
   const clean = hex.replace("#", "")
   return {
     r: Number.parseInt(clean.substr(0, 2), 16) || 0,
@@ -39,8 +49,15 @@ export function fromRgbwHex(hex: string): RGBWColor {
  * Download data as CSV file
  */
 export function downloadCsv(data: PatchEntry[], filename: string): void {
+  if (!Array.isArray(data)) {
+    console.warn("downloadCsv: data is not an array")
+    return
+  }
+
   const headers = ["fromChannel", "toChannel"]
-  const rows = data.map((entry) => [entry.fromChannel, entry.toChannel])
+  const rows = data
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => [entry.fromChannel || 0, entry.toChannel || 0])
   const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n")
 
   const blob = new Blob([csvContent], { type: "text/csv" })
@@ -58,6 +75,10 @@ export function downloadCsv(data: PatchEntry[], filename: string): void {
  * Parse CSV content to patch entries
  */
 export function parseCsv(csvContent: string): PatchEntry[] {
+  if (!csvContent || typeof csvContent !== "string") {
+    return []
+  }
+
   const lines = csvContent.trim().split("\n")
   const entries: PatchEntry[] = []
 
@@ -65,7 +86,10 @@ export function parseCsv(csvContent: string): PatchEntry[] {
   const startIndex = lines[0]?.toLowerCase().includes("channel") ? 1 : 0
 
   for (let i = startIndex; i < lines.length; i++) {
-    const [fromChannel, toChannel] = lines[i].split(",").map((s) => Number.parseInt(s.trim()))
+    const line = lines[i]
+    if (!line || typeof line !== "string") continue
+
+    const [fromChannel, toChannel] = line.split(",").map((s) => Number.parseInt(s.trim()))
     if (!isNaN(fromChannel) && !isNaN(toChannel)) {
       entries.push({ fromChannel, toChannel })
     }
@@ -78,6 +102,9 @@ export function parseCsv(csvContent: string): PatchEntry[] {
  * Format timestamp for display
  */
 export function formatTimestamp(ts: number): string {
+  if (!ts || typeof ts !== "number") {
+    return "N/A"
+  }
   return new Date(ts).toLocaleTimeString("en-US", {
     hour12: false,
     hour: "2-digit",

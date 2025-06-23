@@ -19,7 +19,7 @@ func Router(conf *models.Config) http.Handler {
 	mux.HandleFunc("/api/config", configHandler)
 	mux.HandleFunc("/api/patchmap", patchMapHandler)
 	mux.Handle("/metrics", metrics.Handler())
-	return mux
+	return withCORS(mux)
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {

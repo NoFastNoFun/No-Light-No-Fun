@@ -15,6 +15,15 @@ export function MonitoringDashboard() {
   const { connected, configPackets, artNetMessages, reconnect, stats } = useWebSocket()
   const [autoScroll, setAutoScroll] = useState(true)
 
+  // Safe access to arrays with null/undefined checks
+  const safeConfigPackets = configPackets || []
+  const safeArtNetMessages = artNetMessages || []
+  const safeStats = stats || {
+    totalConfigPackets: 0,
+    totalArtNetMessages: 0,
+    lastConfigPacketSize: 0,
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -41,7 +50,7 @@ export function MonitoringDashboard() {
               <Activity className="h-5 w-5 text-blue-500" />
               <div>
                 <p className="text-sm font-medium">Config Packets</p>
-                <p className="text-2xl font-bold">{stats.totalConfigPackets}</p>
+                <p className="text-2xl font-bold">{safeStats.totalConfigPackets}</p>
               </div>
             </div>
           </CardContent>
@@ -53,7 +62,7 @@ export function MonitoringDashboard() {
               <Activity className="h-5 w-5 text-green-500" />
               <div>
                 <p className="text-sm font-medium">Art-Net Messages</p>
-                <p className="text-2xl font-bold">{stats.totalArtNetMessages}</p>
+                <p className="text-2xl font-bold">{safeStats.totalArtNetMessages}</p>
               </div>
             </div>
           </CardContent>
@@ -65,7 +74,7 @@ export function MonitoringDashboard() {
               <Activity className="h-5 w-5 text-orange-500" />
               <div>
                 <p className="text-sm font-medium">Last Config Size</p>
-                <p className="text-2xl font-bold">{stats.lastConfigPacketSize} bytes</p>
+                <p className="text-2xl font-bold">{safeStats.lastConfigPacketSize} bytes</p>
               </div>
             </div>
           </CardContent>
@@ -88,14 +97,14 @@ export function MonitoringDashboard() {
           <CardContent>
             <ScrollArea className="h-96">
               <div className="space-y-2">
-                {configPackets.length === 0 ? (
+                {safeConfigPackets.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No config packets received yet</p>
                 ) : (
-                  configPackets.map((packet, index) => (
+                  safeConfigPackets.map((packet, index) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex items-center gap-3">
                         <Badge variant="outline">CONFIG</Badge>
-                        <span className="text-sm font-medium">{packet.len} bytes</span>
+                        <span className="text-sm font-medium">{packet?.len || 0} bytes</span>
                       </div>
                       <span className="text-xs text-muted-foreground">{new Date().toLocaleTimeString()}</span>
                     </div>
@@ -120,7 +129,7 @@ export function MonitoringDashboard() {
           <CardContent>
             <ScrollArea className="h-96">
               <div className="space-y-2">
-                {artNetMessages.length === 0 ? (
+                {safeArtNetMessages.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No Art-Net messages sent yet</p>
                 ) : (
                   <div className="space-y-1">
@@ -132,16 +141,18 @@ export function MonitoringDashboard() {
                       <div>Channels</div>
                     </div>
                     {/* Table Rows */}
-                    {artNetMessages.map((message, index) => (
+                    {safeArtNetMessages.map((message, index) => (
                       <div key={index} className="grid grid-cols-4 gap-2 p-2 border rounded text-sm">
-                        <div className="text-xs text-muted-foreground">{formatTimestamp(message.ts)}</div>
-                        <div className="font-mono text-xs">{message.ip}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {message?.ts ? formatTimestamp(message.ts) : "N/A"}
+                        </div>
+                        <div className="font-mono text-xs">{message?.ip || "N/A"}</div>
                         <div>
                           <Badge variant="outline" className="text-xs">
-                            U{message.universe}
+                            U{message?.universe || 0}
                           </Badge>
                         </div>
-                        <div className="text-xs">{message.channels} ch</div>
+                        <div className="text-xs">{message?.channels || 0} ch</div>
                       </div>
                     ))}
                   </div>
