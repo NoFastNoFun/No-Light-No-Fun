@@ -3,35 +3,35 @@ package udp
 import (
 	"log"
 	"net"
+
+	"nolightnofun/metrics"
+	"nolightnofun/routing"
 )
 
-// StartUDPServer starts a UDP listener on the configured port
-func StartUDPServer() error {
-	addr := net.UDPAddr{
-		Port: 6454, // default ArtNet or configurable
-		IP:   net.ParseIP("0.0.0.0"),
-	}
-
+// StartUDPServer feeds incoming eHuB packets into the routing engine.
+func StartUDPServer(e *routing.Engine, port int) error {
+	addr := net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: port}
 	conn, err := net.ListenUDP("udp", &addr)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 2048)
 	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
+		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			log.Printf("UDP read error: %v", err)
+			log.Print(err)
 			continue
 		}
+		metrics.UDPPacketsReceived.Inc()
 
-		go handleMessage(buf[:n], remoteAddr)
+		b := buf[:n]
+		if e.ParseSmallUpdate(b) {
+			continue
+		}
+		if e.ParseConfigPacket(b) {
+			continue
+		}
 	}
-}
-
-func handleMessage(data []byte, addr *net.UDPAddr) {
-	// Placeholder: parse eHuB "update"/"config" format
-	log.Printf("Received UDP from %s: % X", addr.String(), data)
-	// TODO: Parse and broadcast/update system state
 }

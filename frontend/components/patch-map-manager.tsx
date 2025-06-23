@@ -1,407 +1,276 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Trash2, Plus, Edit, Copy } from "lucide-react"
-import { useLEDConfig } from "@/contexts/led-config-context"
-import type { PatchMap, PatchMapEntry } from "@/types/led-config"
+import { Trash2, Plus, Download, Upload, Save, RefreshCw } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import type { PatchEntry } from "@/types/led-config"
+import { downloadCsv, validateChannel } from "@/lib/utils"
 
-/**
- * Patch map manager for DMX rerouting configuration
- */
 export function PatchMapManager() {
-  const { state, addPatchMap, updatePatchMap, removePatchMap, setActivePatchMap } = useLEDConfig()
-  const [newPatchMap, setNewPatchMap] = useState<Partial<PatchMap>>({
-    name: "",
-    entries: [],
-    enabled: true,
-  })
-  const [editingPatchMap, setEditingPatchMap] = useState<string | null>(null)
-  const [newEntry, setNewEntry] = useState<Partial<PatchMapEntry>>({
-    sourceUniverse: 1,
-    sourceChannel: 1,
-    targetUniverse: 1,
-    targetChannel: 1,
-    enabled: true,
-    description: "",
-  })
+  const [patchMap, setPatchMap] = useState<PatchEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [newEntry, setNewEntry] = useState({ fromChannel: 1, toChannel: 1 })
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
 
-  /**
-   * Create new patch map
-   */
-  const handleCreatePatchMap = () => {
-    if (!newPatchMap.name) return
-
-    const patchMap: PatchMap = {
-      id: crypto.randomUUID(),
-      name: newPatchMap.name,
-      entries: [],
-      enabled: newPatchMap.enabled ?? true,
-      createdAt: new Date(),
-      modifiedAt: new Date(),
+  const loadPatchMap = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/patchmap")
+      if (response.ok) {
+        const data = await response.json()
+        setPatchMap(data)
+        toast({ title: "Patch map loaded successfully" })
+      } else {
+        throw new Error("Failed to load patch map")
+      }
+    } catch (error) {
+      toast({
+        title: "Error loading patch map",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    addPatchMap(patchMap)
-    setNewPatchMap({ name: "", entries: [], enabled: true })
   }
 
-  /**
-   * Add entry to patch map
-   */
-  const handleAddEntry = (patchMapId: string) => {
-    const patchMap = state.config.patchMaps.find((p) => p.id === patchMapId)
-    if (
-      !patchMap ||
-      !newEntry.sourceUniverse ||
-      !newEntry.sourceChannel ||
-      !newEntry.targetUniverse ||
-      !newEntry.targetChannel
-    )
+  const savePatchMap = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/patchmap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patchMap),
+      })
+
+      if (response.ok) {
+        toast({ title: "Patch map saved successfully" })
+      } else {
+        throw new Error("Failed to save patch map")
+      }
+    } catch (error) {
+      toast({
+        title: "Error saving patch map",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const exportCsv = async () => {
+    try {
+      const response = await fetch("/api/patchmap")
+      if (response.ok) {
+        const data = await response.json()
+        downloadCsv(data, `patchmap-${new Date().toISOString().split("T")[0]}.csv`)
+        toast({ title: "Patch map exported successfully" })
+      } else {
+        throw new Error("Failed to export patch map")
+      }
+    } catch (error) {
+      toast({
+        title: "Error exporting patch map",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.name.endsWith(".csv")) {
+      toast({ title: "Please select a CSV file", variant: "destructive" })
       return
-
-    const entry: PatchMapEntry = {
-      sourceUniverse: newEntry.sourceUniverse,
-      sourceChannel: newEntry.sourceChannel,
-      targetUniverse: newEntry.targetUniverse,
-      targetChannel: newEntry.targetChannel,
-      enabled: newEntry.enabled ?? true,
-      description: newEntry.description,
     }
 
-    const updatedPatchMap: PatchMap = {
-      ...patchMap,
-      entries: [...patchMap.entries, entry],
-      modifiedAt: new Date(),
+    const formData = new FormData()
+    formData.append("file", file)
+
+    setLoading(true)
+    try {
+      const response = await fetch("/api/config", {
+        method: "PUT",
+        body: formData,
+      })
+
+      if (response.ok) {
+        await loadPatchMap() // Reload to show imported data
+        toast({ title: "CSV imported successfully" })
+      } else {
+        throw new Error("Failed to import CSV")
+      }
+    } catch (error) {
+      toast({
+        title: "Error importing CSV",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
 
-    updatePatchMap(updatedPatchMap)
-    setNewEntry({
-      sourceUniverse: 1,
-      sourceChannel: 1,
-      targetUniverse: 1,
-      targetChannel: 1,
-      enabled: true,
-      description: "",
-    })
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
-  /**
-   * Remove entry from patch map
-   */
-  const handleRemoveEntry = (patchMapId: string, entryIndex: number) => {
-    const patchMap = state.config.patchMaps.find((p) => p.id === patchMapId)
-    if (!patchMap) return
-
-    const updatedPatchMap: PatchMap = {
-      ...patchMap,
-      entries: patchMap.entries.filter((_, index) => index !== entryIndex),
-      modifiedAt: new Date(),
+  const addEntry = () => {
+    if (!validateChannel(newEntry.fromChannel) || !validateChannel(newEntry.toChannel)) {
+      toast({ title: "Channels must be between 1-512", variant: "destructive" })
+      return
     }
 
-    updatePatchMap(updatedPatchMap)
+    setPatchMap((prev) => [...prev, newEntry])
+    setNewEntry({ fromChannel: 1, toChannel: 1 })
   }
 
-  /**
-   * Toggle entry enabled state
-   */
-  const toggleEntryEnabled = (patchMapId: string, entryIndex: number) => {
-    const patchMap = state.config.patchMaps.find((p) => p.id === patchMapId)
-    if (!patchMap) return
-
-    const updatedEntries = [...patchMap.entries]
-    updatedEntries[entryIndex] = {
-      ...updatedEntries[entryIndex],
-      enabled: !updatedEntries[entryIndex].enabled,
-    }
-
-    const updatedPatchMap: PatchMap = {
-      ...patchMap,
-      entries: updatedEntries,
-      modifiedAt: new Date(),
-    }
-
-    updatePatchMap(updatedPatchMap)
+  const removeEntry = (index: number) => {
+    setPatchMap((prev) => prev.filter((_, i) => i !== index))
   }
 
-  /**
-   * Duplicate patch map
-   */
-  const duplicatePatchMap = (patchMap: PatchMap) => {
-    const duplicated: PatchMap = {
-      ...patchMap,
-      id: crypto.randomUUID(),
-      name: `${patchMap.name} (Copy)`,
-      createdAt: new Date(),
-      modifiedAt: new Date(),
-    }
-
-    addPatchMap(duplicated)
+  const updateEntry = (index: number, updates: Partial<PatchEntry>) => {
+    setPatchMap((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...updates } : entry)))
   }
 
-  const activePatchMap = state.config.patchMaps.find((p) => p.id === state.config.activePatchMapId)
+  useEffect(() => {
+    loadPatchMap()
+  }, [])
 
   return (
     <div className="space-y-6">
-      {/* Active Patch Map Selection */}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Patch Map Manager</h2>
+        <div className="flex gap-2">
+          <Button onClick={loadPatchMap} variant="outline" disabled={loading}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reload
+          </Button>
+          <Button onClick={exportCsv} variant="outline" disabled={loading}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button onClick={savePatchMap} disabled={loading}>
+            <Save className="h-4 w-4 mr-2" />
+            Save
+          </Button>
+        </div>
+      </div>
+
+      {/* Import/Export */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Patch Map</CardTitle>
+          <CardTitle>Import/Export</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <Label htmlFor="active-patch-map">Select Active Patch Map</Label>
-              <Select
-                value={state.config.activePatchMapId || ""}
-                onValueChange={(value) => setActivePatchMap(value || undefined)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="No active patch map" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {state.config.patchMaps.map((patchMap) => (
-                    <SelectItem key={patchMap.id} value={patchMap.id}>
-                      {patchMap.name} ({patchMap.entries.length} entries)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {activePatchMap && (
-              <div className="flex items-center gap-2">
-                <Badge variant={activePatchMap.enabled ? "default" : "secondary"}>
-                  {activePatchMap.enabled ? "Active" : "Disabled"}
-                </Badge>
-                <Switch
-                  checked={activePatchMap.enabled}
-                  onCheckedChange={(checked) =>
-                    updatePatchMap({ ...activePatchMap, enabled: checked, modifiedAt: new Date() })
-                  }
-                />
-              </div>
-            )}
+          <div className="flex gap-4">
+            <Button onClick={() => fileInputRef.current?.click()} variant="outline">
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
           </div>
-
-          {activePatchMap && (
-            <div className="p-4 border rounded-lg bg-muted/50">
-              <h4 className="font-semibold">{activePatchMap.name}</h4>
-              <p className="text-sm text-muted-foreground">
-                {activePatchMap.entries.length} entries • Created: {activePatchMap.createdAt.toLocaleDateString()} •
-                Modified: {activePatchMap.modifiedAt.toLocaleDateString()}
-              </p>
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground">CSV format: fromChannel,toChannel (one mapping per line)</p>
         </CardContent>
       </Card>
 
-      {/* Create New Patch Map */}
+      {/* Add New Entry */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
-            Create New Patch Map
+            Add New Mapping
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label htmlFor="patch-map-name">Patch Map Name</Label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="from-channel">From Channel</Label>
               <Input
-                id="patch-map-name"
-                placeholder="My Patch Map"
-                value={newPatchMap.name || ""}
-                onChange={(e) => setNewPatchMap((prev) => ({ ...prev, name: e.target.value }))}
+                id="from-channel"
+                type="number"
+                min="1"
+                max="512"
+                value={newEntry.fromChannel}
+                onChange={(e) =>
+                  setNewEntry((prev) => ({ ...prev, fromChannel: Number.parseInt(e.target.value) || 1 }))
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="to-channel">To Channel</Label>
+              <Input
+                id="to-channel"
+                type="number"
+                min="1"
+                max="512"
+                value={newEntry.toChannel}
+                onChange={(e) => setNewEntry((prev) => ({ ...prev, toChannel: Number.parseInt(e.target.value) || 1 }))}
               />
             </div>
             <div className="flex items-end">
-              <Button onClick={handleCreatePatchMap} disabled={!newPatchMap.name}>
-                Create Patch Map
+              <Button onClick={addEntry} className="w-full">
+                Add Mapping
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Existing Patch Maps */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Patch Maps ({state.config.patchMaps.length})</h3>
-
-        {state.config.patchMaps.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              No patch maps configured. Create a patch map to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          state.config.patchMaps.map((patchMap) => (
-            <Card key={patchMap.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <CardTitle className="text-lg">{patchMap.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {patchMap.entries.length} entries • Created: {patchMap.createdAt.toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant={patchMap.enabled ? "default" : "secondary"}>
-                      {patchMap.enabled ? "Enabled" : "Disabled"}
-                    </Badge>
-                    {state.config.activePatchMapId === patchMap.id && <Badge variant="outline">Active</Badge>}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={patchMap.enabled}
-                      onCheckedChange={(checked) =>
-                        updatePatchMap({ ...patchMap, enabled: checked, modifiedAt: new Date() })
-                      }
-                    />
-                    <Button variant="outline" size="sm" onClick={() => duplicatePatchMap(patchMap)}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingPatchMap(editingPatchMap === patchMap.id ? null : patchMap.id)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => removePatchMap(patchMap.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+      {/* Patch Map Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Current Patch Map ({patchMap.length} entries)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {patchMap.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              No patch mappings configured. Add a mapping or import a CSV file.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-4 p-3 bg-muted rounded-lg font-semibold text-sm">
+                <div>From Channel</div>
+                <div>To Channel</div>
+                <div>Actions</div>
+              </div>
+              {patchMap.map((entry, index) => (
+                <div key={index} className="grid grid-cols-3 gap-4 p-3 border rounded-lg items-center">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="512"
+                    value={entry.fromChannel}
+                    onChange={(e) => updateEntry(index, { fromChannel: Number.parseInt(e.target.value) || 1 })}
+                  />
+                  <Input
+                    type="number"
+                    min="1"
+                    max="512"
+                    value={entry.toChannel}
+                    onChange={(e) => updateEntry(index, { toChannel: Number.parseInt(e.target.value) || 1 })}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => removeEntry(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Patch Map Entries */}
-                {patchMap.entries.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No entries in this patch map</p>
-                ) : (
-                  <div className="space-y-2">
-                    {patchMap.entries.map((entry, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-4">
-                          <Switch
-                            checked={entry.enabled}
-                            onCheckedChange={() => toggleEntryEnabled(patchMap.id, index)}
-                          />
-                          <div className="text-sm">
-                            <span className="font-medium">
-                              U{entry.sourceUniverse}:Ch{entry.sourceChannel}
-                            </span>
-                            <span className="mx-2">→</span>
-                            <span className="font-medium">
-                              U{entry.targetUniverse}:Ch{entry.targetChannel}
-                            </span>
-                            {entry.description && (
-                              <span className="ml-2 text-muted-foreground">({entry.description})</span>
-                            )}
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={() => handleRemoveEntry(patchMap.id, index)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add New Entry */}
-                {editingPatchMap === patchMap.id && (
-                  <div className="border-t pt-4 space-y-4">
-                    <h4 className="font-semibold">Add New Entry</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div>
-                        <Label>Source Universe</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="32768"
-                          value={newEntry.sourceUniverse || ""}
-                          onChange={(e) =>
-                            setNewEntry((prev) => ({
-                              ...prev,
-                              sourceUniverse: Number.parseInt(e.target.value) || 1,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label>Source Channel</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="512"
-                          value={newEntry.sourceChannel || ""}
-                          onChange={(e) =>
-                            setNewEntry((prev) => ({
-                              ...prev,
-                              sourceChannel: Number.parseInt(e.target.value) || 1,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label>Target Universe</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="32768"
-                          value={newEntry.targetUniverse || ""}
-                          onChange={(e) =>
-                            setNewEntry((prev) => ({
-                              ...prev,
-                              targetUniverse: Number.parseInt(e.target.value) || 1,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label>Target Channel</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="512"
-                          value={newEntry.targetChannel || ""}
-                          onChange={(e) =>
-                            setNewEntry((prev) => ({
-                              ...prev,
-                              targetChannel: Number.parseInt(e.target.value) || 1,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button onClick={() => handleAddEntry(patchMap.id)} className="w-full">
-                          Add Entry
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Description (Optional)</Label>
-                      <Input
-                        placeholder="Entry description"
-                        value={newEntry.description || ""}
-                        onChange={(e) => setNewEntry((prev) => ({ ...prev, description: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

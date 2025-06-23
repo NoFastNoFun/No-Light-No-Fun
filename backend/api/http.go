@@ -4,28 +4,39 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"nolightnofun/metrics"
 	"nolightnofun/models"
 )
 
-var config models.Config
+var cfg *models.Config
 
-func Router() http.Handler {
+func Router(conf *models.Config) http.Handler {
+	cfg = conf
+	bindConfigPointer(conf)
+
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/ws", WebSocketHandler)
 	mux.HandleFunc("/api/config", configHandler)
+	mux.HandleFunc("/api/patchmap", patchMapHandler)
+	mux.Handle("/metrics", metrics.Handler())
 	return mux
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		_ = json.NewEncoder(w).Encode(config)
-	} else if r.Method == http.MethodPost {
-		var newConfig models.Config
-		err := json.NewDecoder(r.Body).Decode(&newConfig)
-		if err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+	switch r.Method {
+	case http.MethodGet:
+		_ = json.NewEncoder(w).Encode(cfg)
+
+	case http.MethodPost:
+		var in models.Config
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, "bad JSON", http.StatusBadRequest)
 			return
 		}
-		config = newConfig
-		w.WriteHeader(http.StatusOK)
+		*cfg = in
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
