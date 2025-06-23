@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/api"
 
 // Backend simulation payload format
 interface BackendSimulatePayload {
-  entity_id: string
+  entity_id: number // Changed to number to match new format
   r: number
   g: number
   b: number
@@ -22,7 +22,7 @@ interface BackendSimulatePayload {
 }
 
 export function EntitySimulator() {
-  const [entityId, setEntityId] = useState("")
+  const [entityId, setEntityId] = useState<number>(1)
   const [color, setColor] = useState<RGBWColor>({ r: 255, g: 0, b: 0, w: 0 })
   const [hexColor, setHexColor] = useState("#FF000000")
   const [loading, setLoading] = useState(false)
@@ -39,14 +39,14 @@ export function EntitySimulator() {
   }
 
   const sendSimulation = async () => {
-    if (!entityId.trim()) {
+    if (!entityId) {
       toast({ title: "Please enter an Entity ID", variant: "destructive" })
       return
     }
 
     // Convert to backend format
     const payload: BackendSimulatePayload = {
-      entity_id: entityId.trim(),
+      entity_id: entityId,
       r: color.r,
       g: color.g,
       b: color.b,
@@ -59,7 +59,7 @@ export function EntitySimulator() {
         method: "POST",
         body: JSON.stringify(payload),
       })
-      toast({ title: `Simulation sent for ${entityId}` })
+      toast({ title: `Simulation sent for Entity ${entityId}` })
     } catch (error) {
       toast({
         title: "Error sending simulation",
@@ -103,9 +103,11 @@ export function EntitySimulator() {
             <Label htmlFor="entity-id">Entity ID</Label>
             <Input
               id="entity-id"
-              placeholder="projecteur"
+              type="number"
+              min="1"
+              placeholder="1"
               value={entityId}
-              onChange={(e) => setEntityId(e.target.value)}
+              onChange={(e) => setEntityId(Number.parseInt(e.target.value) || 1)}
             />
             <p className="text-xs text-muted-foreground mt-1">Use the same entity ID as configured in your mappings</p>
           </div>
@@ -177,9 +179,9 @@ export function EntitySimulator() {
           </div>
 
           {/* Send Button */}
-          <Button onClick={sendSimulation} disabled={loading || !entityId.trim()} className="w-full">
+          <Button onClick={sendSimulation} disabled={loading || !entityId} className="w-full">
             <Send className="h-4 w-4 mr-2" />
-            {loading ? "Sending..." : "Send Color Update"}
+            {loading ? "Sending..." : `Send Color Update to Entity ${entityId}`}
           </Button>
 
           {/* Backend Format Info */}
@@ -191,7 +193,7 @@ export function EntitySimulator() {
               <pre>
                 {JSON.stringify(
                   {
-                    entity_id: entityId || "projecteur",
+                    entity_id: entityId,
                     r: color.r,
                     g: color.g,
                     b: color.b,

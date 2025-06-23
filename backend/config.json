@@ -1,10 +1,11 @@
 {
   "mappings": [
     {
-      "entity_id": "0",
+      "entity_id": 100,
+      "name": "Projecteur",
       "controller_ip": "192.168.1.45",
       "universe": 200,
-      "channel_start": 0,
+      "channel_start": 1,
       "channel_count": 3,
       "use_r": false,
       "use_g": false,

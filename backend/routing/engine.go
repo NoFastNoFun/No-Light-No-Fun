@@ -48,9 +48,9 @@ func (e *Engine) ParseSmallUpdate(buf []byte) bool {
 	if len(buf) != 6 {
 		return false
 	}
-	idStr := strconv.Itoa(int(binary.BigEndian.Uint16(buf[:2])))
+	id := int(binary.BigEndian.Uint16(buf[:2]))
 	col := models.Color{R: buf[2], G: buf[3], B: buf[4], W: buf[5]}
-	e.State.Set(idStr, col)
+	e.State.Set(id, col)
 	e.NotifyChange()
 	return true
 }

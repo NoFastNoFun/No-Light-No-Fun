@@ -39,21 +39,26 @@ export interface ChannelFlags {
 
 /** Entity mapping configuration (Frontend format) */
 export interface Mapping {
-  entityId: string;
+  entityId: number; // Changed to integer
+  name: string; // Added name parameter
   ip: string;
   universe: number;
   startChannel: number;
+  channelCount: number; // Added channel count
   flags: ChannelFlags;
 }
 
 /** Complete configuration (Frontend format) */
 export interface Config {
   mappings: Mapping[];
+  udpPort?: number;
+  defaultUniverse?: number;
+  maxFps?: number;
 }
 
 /** Backend mapping format (snake_case) */
 export interface BackendMapping {
-  entity_id: string;
+  entity_id: string | number; // Backend might send string or number
   controller_ip: string;
   universe: number;
   channel_start: number;

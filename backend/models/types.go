@@ -8,10 +8,11 @@ type Color struct {
 	W byte `json:"w"`
 }
 
-// Mapping links one named Entity to output channels on a controller.
+// Mapping links one Entity to its controller channels.
 type Mapping struct {
-	EntityID     string `json:"entity_id"` // now string
-	ControllerIP string `json:"controller_ip"`
+	EntityID     int    `json:"entity_id"`     // numeric ID
+	Name         string `json:"name"`          // friendly label
+	ControllerIP string `json:"controller_ip"` // Art-Net node
 	Universe     int    `json:"universe"`
 	ChannelStart int    `json:"channel_start"`
 	ChannelCount int    `json:"channel_count"`
@@ -33,5 +34,5 @@ type Config struct {
 	Patches         []Patch   `json:"patches"`
 	Port            int       `json:"udp_port"`
 	DefaultUniverse int       `json:"default_universe"`
-	MaxFPS          int       `json:"max_fps"` // Throttle (25 default)
+	MaxFPS          int       `json:"max_fps"`
 }
