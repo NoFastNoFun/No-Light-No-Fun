@@ -1,0 +1,14 @@
+# Coverage table
+
+| Exigence                                      | Covered ?   | Notes                                                                                                                                                                          |
+| --------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **E1 - Recevoir le protocole eHuB**           | **Partiel** | • UDP listener + minimal *update* decoder.<br>• `ehub_port` configurable.<br>✘ *config* messages & universe-filtering not decoded yet.                                         |
+| **E2 - Moniteur eHuB**                        | **Partiel** | `/ws/ehub` streams every update in real time and can be toggled with `monitor_ehub`.<br>UI layer (graph/heat-map) still to be built.                                           |
+| **E3 - Correspondance entités ↔ contrôleurs** | **Oui**     | JSON gives full control: group ranges, IP, universe, DMX channel offset, RGB/R/G/B selectors, enable/disable per route.                                                        |
+| **E4 - Acheminement**                         | **Oui**     | Single worker goroutine, table look-ups, per-frame dirty build, per-IP conn cache, ticker-based send — minimal RAM/CPU and scalable.                                           |
+| **E5 - Moniteur DMX / sortie**                | **Oui**     | `/ws/dmx` pushes every Art-Net frame; switchable with `monitor_dmx`.                                                                                                           |
+| **E6 - Sauvegarde & chargement**              | **Oui**     | `GET /api/config` ↔ `PUT /api/config` load any JSON at runtime; start-up auto-loads `config.json` if present. (Persistent save handled client-side by grabbing the same JSON.) |
+| **E7 - Contrôle de la charge réseau**         | **Oui**     | `max_fps` caps global send rate; changeable live in config.                                                                                                                    |
+| **E8 - Patching**                             | **Oui**     | `POST /api/patch/csv` uploads/overwrites a CSV map; applied every frame and can be cleared by sending an empty list.                                                           |
+| **E9 - ArtNet monitor (bonus)**               | **Non**     | Receiver/visualiser not implemented yet.                                                                                                                                       |
+| **E10 - Entity faker (bonus)**                | **Non**     | No built-in generator; would need an extra endpoint or CLI helper.                                                                                                             |
