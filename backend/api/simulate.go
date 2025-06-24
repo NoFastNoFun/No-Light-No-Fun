@@ -1,56 +1,63 @@
-// nolightnofun/api/simulate.go
 package api
 
 import (
 	"encoding/binary"
 	"encoding/json"
-	"log"
+	"net"
 	"net/http"
-	"strconv"
 )
 
 type simReq struct {
-	EntityID json.RawMessage `json:"entity_id"`
-	R, G, B  byte            `json:"r","g","b"`
-	W        byte            `json:"w"`
+	ID       *int `json:"id,omitempty"`        // plain number
+	EntityID *int `json:"entity_id,omitempty"` // alias
+	R        byte `json:"r"`
+	G        byte `json:"g"`
+	B        byte `json:"b"`
+	W        byte `json:"w"`
 }
 
+// POST /api/simulate  → inject 6-byte packet into local UDP listener.
 func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.WriteHeader(405)
 		return
 	}
 
 	var req simReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad JSON: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, "bad JSON", 400)
 		return
 	}
 
-	id, err := rawToUint16(req.EntityID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	// Resolve entity ID
+	var id int
+	switch {
+	case req.ID != nil:
+		id = *req.ID
+	case req.EntityID != nil:
+		id = *req.EntityID
+	default:
+		http.Error(w, "missing id/entity_id", 400)
+		return
+	}
+	if id <= 0 || id > 65535 {
+		http.Error(w, "id out of range (1-65535)", 400)
 		return
 	}
 
+	// Build 6-byte eHuB frame
 	var pkt [6]byte
-	binary.BigEndian.PutUint16(pkt[0:2], id)
+	binary.BigEndian.PutUint16(pkt[0:2], uint16(id))
 	pkt[2], pkt[3], pkt[4], pkt[5] = req.R, req.G, req.B, req.W
 
-	log.Printf("[simulate] id=%d R=%d G=%d B=%d W=%d", id, req.R, req.G, req.B, req.W)
-	dispatcher.HandlePacket(pkt[:])
-	w.WriteHeader(http.StatusNoContent)
-}
+	conn, err := net.DialUDP("udp", nil,
+		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: cfg.Port})
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer conn.Close()
 
-func rawToUint16(raw json.RawMessage) (uint16, error) {
-	var n uint16
-	if err := json.Unmarshal(raw, &n); err == nil && n > 0 {
-		return n, nil
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return 0, err
-	}
-	v, err := strconv.ParseUint(s, 10, 16)
-	return uint16(v), err
+	_, _ = conn.Write(pkt[:])
+	w.WriteHeader(204)
 }

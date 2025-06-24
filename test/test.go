@@ -5,87 +5,244 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"sync/atomic"
+	"syscall"
 	"time"
 )
 
-// buildArtDMXHeader constructs an Art-Net ArtDMX (OpCode 0x5000) packet header.
-// The header layout is fixed-length (18 bytes) and follows the Art-Net 4 specification.
-func buildArtDMXHeader(universe uint16) []byte {
-	header := make([]byte, 18)
+const (
+	dmxSize      = 512
+	ledsPerHalf  = 85
+	ledsPerFull  = 170
+	ledsPerPair  = 255
+	projectorUni = 200
+	projectorIP  = "192.168.1.45"
+)
 
-	// ID "Art-Net" plus null terminator
-	copy(header[0:], []byte("Art-Net\x00"))
+// ---------- controller mapping ----------
 
-	// OpCode (little-endian) 0x5000 → 00 50
-	binary.LittleEndian.PutUint16(header[8:], 0x5000)
-
-	// Protocol version (big-endian) 14 → 00 0E
-	binary.BigEndian.PutUint16(header[10:], 14)
-
-	// Sequence (0) and Physical (0)
-	header[12] = 0
-	header[13] = 0
-
-	// Universe (little-endian)
-	binary.LittleEndian.PutUint16(header[14:], universe)
-
-	// Length (big-endian) fixed at 512
-	binary.BigEndian.PutUint16(header[16:], 512)
-
-	return header
+type controller struct {
+	ip          string
+	first, last uint16
 }
 
-// sendArtNetDMX builds and transmits a single Art-Net DMX packet to ip:port.
-func sendArtNetDMX(ip string, universe uint16, data []byte, port int) error {
-	addr := &net.UDPAddr{IP: net.ParseIP(ip), Port: port}
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		return err
+var controllers = []controller{
+	{"192.168.1.45", 0, 31},
+	{"192.168.1.46", 32, 63},
+	{"192.168.1.47", 64, 95},
+	{"192.168.1.48", 96, 127},
+}
+
+func universeToIP(u uint16) (string, bool) {
+	for _, c := range controllers {
+		if u >= c.first && u <= c.last {
+			return c.ip, true
+		}
 	}
-	defer conn.Close()
-
-	packet := append(buildArtDMXHeader(universe), data...)
-	_, err = conn.Write(packet)
-	return err
+	if u == projectorUni {
+		return projectorIP, true
+	}
+	return "", false
 }
+
+// ---------- Art-Net helpers ----------
+
+func artHeader(u uint16) []byte {
+	h := make([]byte, 18)
+	copy(h, "Art-Net\x00")
+	binary.LittleEndian.PutUint16(h[8:], 0x5000)
+	binary.BigEndian.PutUint16(h[10:], 14)
+	binary.LittleEndian.PutUint16(h[14:], u)
+	binary.BigEndian.PutUint16(h[16:], dmxSize)
+	return h
+}
+
+func send(u uint16, d []byte, conns map[string]*net.UDPConn, port int) {
+	ip, ok := universeToIP(u)
+	if !ok || ip == "" {
+		return
+	}
+	c, ok := conns[ip]
+	if !ok {
+		var err error
+		c, err = net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(ip), Port: port})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "udp:", err)
+			return
+		}
+		conns[ip] = c
+	}
+	c.Write(append(artHeader(u), d...))
+}
+
+// ---------- LED index mapping ----------
+
+func mapLED(n int) (uint16, int) {
+	group := n / ledsPerPair
+	offset := n % ledsPerPair
+	even := uint16(group * 2)
+	if offset < ledsPerFull {
+		return even, offset * 3
+	}
+	return even + 1, (offset - ledsPerFull) * 3
+}
+
+// ---------- main ----------
 
 func main() {
-	var (
-		ip       = flag.String("ip", "", "BC216 IP address (required)")
-		universe = flag.Uint("universe", 0, "Art-Net universe number (required)")
-		r        = flag.Uint("r", 255, "Red   (0–255)")
-		g        = flag.Uint("g", 0, "Green (0–255)")
-		b        = flag.Uint("b", 0, "Blue  (0–255)")
-		delay    = flag.Float64("delay", 0.1, "Seconds between each LED")
-		port     = flag.Int("port", 6454, "Art-Net port (default 6454)")
-	)
+	fps := flag.Float64("fps", 40, "frames per second")
+	cols := flag.Int("cols", 255, "LEDs per row (up/down step)")
+	leds := flag.Int("leds", 16320, "total LEDs")
+	start := flag.Int("start", 0, "initial LED index (0-based)")
+	port := flag.Int("port", 6454, "Art-Net UDP port")
+	httpA := flag.String("http", ":8090", "HTTP listen addr ('' disables)")
+	r := flag.Uint("r", 255, "red 0-255")
+	g := flag.Uint("g", 255, "green 0-255")
+	b := flag.Uint("b", 255, "blue 0-255")
 	flag.Parse()
 
-	if *ip == "" || *universe == 0 {
-		fmt.Fprintln(os.Stderr, "Error: --ip and --universe are required")
-		flag.Usage()
+	if *fps <= 0 || *cols <= 0 || *start < 0 || *start >= *leds {
+		fmt.Fprintln(os.Stderr, "bad parameters")
 		os.Exit(1)
 	}
 
-	const maxLEDs = 170
-	for i := 1; i <= maxLEDs; i++ {
-		buf := make([]byte, 512)
-		base := 3 * (i - 1)
-		if base+2 < len(buf) {
-			buf[base] = byte(*r)
-			buf[base+1] = byte(*g)
-			buf[base+2] = byte(*b)
-		}
+	/* --- shared state --- */
+	var px int64 = int64(*start)
+	prev := *start
+	delay := time.Second / time.Duration(*fps)
+	conns := make(map[string]*net.UDPConn)
 
-		if err := sendArtNetDMX(*ip, uint16(*universe), buf, *port); err != nil {
-			fmt.Fprintf(os.Stderr, "send error: %v\n", err)
-			os.Exit(1)
-		}
+	/* --- HTTP UI --- */
+	if *httpA != "" {
+		go func() {
+			http.HandleFunc("/", page)
+			http.HandleFunc("/move", func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Query().Get("dir") {
+				case "left":
+					atomic.AddInt64(&px, -1)
+				case "right":
+					atomic.AddInt64(&px, 1)
+				case "up":
+					atomic.AddInt64(&px, int64(-*cols))
+				case "down":
+					atomic.AddInt64(&px, int64(*cols))
+				}
+			})
+			http.ListenAndServe(*httpA, nil)
+		}()
+	}
 
-		fmt.Printf("Lit LED %d in universe %d\n", i, *universe)
-		time.Sleep(time.Duration(*delay * float64(time.Second)))
+	/* --- terminal keys --- */
+	go arrows(&px, *cols)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	tick := time.NewTicker(delay)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-quit:
+			return
+		case <-tick.C:
+			cur := int(atomic.LoadInt64(&px))
+			for cur < 0 {
+				cur += *leds
+			}
+			for cur >= *leds {
+				cur -= *leds
+			}
+			atomic.StoreInt64(&px, int64(cur))
+
+			frames := make(map[uint16][]byte)
+
+			/* clear prev */
+			if prev != cur {
+				u, ch := mapLED(prev)
+				if u != projectorUni {
+					buf := make([]byte, dmxSize)
+					frames[u] = buf
+					if ch+2 < dmxSize {
+						buf[ch], buf[ch+1], buf[ch+2] = 0, 0, 0
+					}
+				}
+				prev = cur
+			}
+
+			/* draw cur */
+			u, ch := mapLED(cur)
+			if u != projectorUni {
+				buf := make([]byte, dmxSize)
+				if ch+2 < dmxSize {
+					buf[ch] = uint8(*r)
+					buf[ch+1] = uint8(*g)
+					buf[ch+2] = uint8(*b)
+				}
+				frames[u] = buf
+			}
+
+			for uni, data := range frames {
+				send(uni, data, conns, *port)
+			}
+		}
 	}
 }
 
-// Usage: go run test/test.go --ip <BC216_IP> --universe <UNIVERSE> --r <RED> --g <GREEN> --b <BLUE> [--delay <DELAY>] [--port <PORT>]
+/* --- helpers --- */
+
+func page(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(`<!doctype html><html><body>
+<h2>Move pixel</h2>
+<button onclick="mv('up')">&#x2191;</button><br>
+<button onclick="mv('left')">&#x2190;</button>
+<button onclick="mv('down')">&#x2193;</button>
+<button onclick="mv('right')">&#x2192;</button>
+<script>
+function mv(d){fetch('/move?dir='+d,{method:'POST'});}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')mv('left');
+  if(e.key==='ArrowRight')mv('right');
+  if(e.key==='ArrowUp')mv('up');
+  if(e.key==='ArrowDown')mv('down');
+});
+</script></body></html>`))
+}
+
+func arrows(px *int64, cols int) {
+	buf := make([]byte, 3)
+	for {
+		n, _ := os.Stdin.Read(buf)
+		if n == 0 {
+			continue
+		}
+		switch {
+		case n == 3 && buf[0] == 0x1b && buf[1] == '[':
+			switch buf[2] {
+			case 'D':
+				atomic.AddInt64(px, -1)
+			case 'C':
+				atomic.AddInt64(px, 1)
+			case 'A':
+				atomic.AddInt64(px, int64(-cols))
+			case 'B':
+				atomic.AddInt64(px, int64(cols))
+			}
+		case n == 2 && (buf[0] == 0 || buf[0] == 0xe0):
+			switch buf[1] {
+			case 0x4b:
+				atomic.AddInt64(px, -1) // left
+			case 0x4d:
+				atomic.AddInt64(px, 1) // right
+			case 0x48:
+				atomic.AddInt64(px, int64(-cols)) // up
+			case 0x50:
+				atomic.AddInt64(px, int64(cols)) // down
+			}
+		}
+	}
+}

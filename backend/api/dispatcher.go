@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"nolightnofun/artnet"
@@ -17,14 +18,21 @@ func NewDispatcher(c *models.Config) *Dispatcher { return &Dispatcher{cfg: c} }
 func (d *Dispatcher) Run() {
 	addr := net.UDPAddr{IP: net.IPv4zero, Port: d.cfg.Port}
 	conn, err := net.ListenUDP("udp", &addr)
+
+	/* -----------------------------------------------
+	   Port busy → just skip the listener, but DO NOT
+	   crash.  Simulation and outbound Art-Net still
+	   function via HandlePacket().
+	------------------------------------------------*/
 	if err != nil {
-		log.Printf("[dispatcher] UDP %d busy, listening on random port", d.cfg.Port)
-		conn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-		if err != nil {
-			log.Fatalf("[dispatcher] FATAL: %v", err)
+		if strings.Contains(err.Error(), "address") || strings.Contains(err.Error(), "in use") {
+			log.Printf("[dispatcher] UDP %d already in use; disabling eHuB listener (simulation still works)", d.cfg.Port)
+			return
 		}
-		d.cfg.Port = conn.LocalAddr().(*net.UDPAddr).Port
+		log.Printf("[dispatcher] UDP bind failed: %v", err)
+		return
 	}
+	defer conn.Close()
 	log.Printf("[dispatcher] UDP listener ready on :%d", d.cfg.Port)
 
 	buf := make([]byte, 1024)
@@ -36,15 +44,12 @@ func (d *Dispatcher) Run() {
 
 func (d *Dispatcher) HandlePacket(p []byte) {
 	if len(p) != 6 {
-		log.Printf("[dispatcher] drop len=%d", len(p))
 		return
 	}
 
 	id := int(binary.BigEndian.Uint16(p[0:2]))
 	r, g, b, w := p[2], p[3], p[4], p[5]
-	log.Printf("[dispatcher] frame id=%d R=%d G=%d B=%d W=%d", id, r, g, b, w)
 
-	sent := 0
 	for _, m := range d.cfg.Mappings {
 		if m.EntityID != id {
 			continue
@@ -65,16 +70,7 @@ func (d *Dispatcher) HandlePacket(p []byte) {
 			dmx[base+3] = w
 		}
 
-		err := artnet.SendArtNetDMX(m.ControllerIP, m.Universe, dmx[:])
-		if err != nil {
-			log.Printf("[dispatcher] → %s u=%d ERROR %v", m.ControllerIP, m.Universe, err)
-		} else {
-			log.Printf("[dispatcher] → %s u=%d OK", m.ControllerIP, m.Universe)
-		}
-		sent++
-	}
-	if sent == 0 {
-		log.Printf("[dispatcher] WARN: no mapping matches entity %d", id)
+		_ = artnet.SendArtNetDMX(m.ControllerIP, m.Universe, dmx[:])
 	}
 }
 
