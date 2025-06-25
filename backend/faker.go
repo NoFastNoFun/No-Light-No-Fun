@@ -55,6 +55,8 @@ func (f *faker) start(r fakerReq) error {
 		go fakerSolid(ctx, r)
 	case "chase":
 		go fakerChase(ctx, r)
+	case "fill":
+		go fakerFill(ctx, r)
 	default:
 		cancel()
 		return errors.New("unknown mode")
@@ -130,6 +132,30 @@ func fakerChase(ctx context.Context, req fakerReq) {
 			if cur > req.To {
 				cur = req.From
 			}
+		}
+	}
+}
+
+func fakerFill(ctx context.Context, req fakerReq) {
+	col := scale(req.Color, req.Brightness)
+	fps := req.FPS
+	if fps <= 0 {
+		fps = 20
+	}
+	tick := time.NewTicker(time.Duration(float64(time.Second) / fps))
+	defer tick.Stop()
+
+	current := req.From
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			ehubChan <- eHuBUpdate{EntityID: current, Color: col}
+			if current >= req.To {
+				return
+			}
+			current++
 		}
 	}
 }

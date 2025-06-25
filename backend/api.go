@@ -99,6 +99,8 @@ func buildRouter() http.Handler {
 	r.Post("/api/patch/csv", postPatchCSV)
 	r.Post("/api/faker", postFaker)
 	r.Delete("/api/faker", deleteFaker)
+	r.Post("/api/stream", postStream) // NEW
+	r.Delete("/api/stream", deleteStream)
 
 	r.Get("/ws/ehub", wsEhub)
 	r.Get("/ws/dmx", wsDMX)
