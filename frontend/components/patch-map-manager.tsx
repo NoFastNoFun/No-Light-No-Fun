@@ -6,30 +6,36 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import { Trash2, Plus, Download, Upload, Save, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { PatchEntry } from "@/types/led-config"
 import { downloadCsv, validateChannel } from "@/lib/utils"
-import { apiFetch, apiUpload } from "@/lib/api"
+import { apiFetch, apiUploadCSV } from "@/lib/api"
 
 export function PatchMapManager() {
   const [patchMap, setPatchMap] = useState<PatchEntry[]>([])
   const [loading, setLoading] = useState(false)
-  const [newEntry, setNewEntry] = useState({ fromChannel: 1, toChannel: 1 })
+  const [csvData, setCsvData] = useState("")
+  const [newEntry, setNewEntry] = useState({ from: 1, to: 1 })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   const loadPatchMap = async () => {
     setLoading(true)
     try {
-      const data = await apiFetch<PatchEntry[]>("patchmap")
-      // Handle null/undefined response or non-array data
-      const safePatchMap = Array.isArray(data) ? data : []
-      setPatchMap(safePatchMap)
+      const data = await apiFetch<any>("config")
+      const patches = Array.isArray(data?.patch) ? data.patch : []
+      setPatchMap(patches)
+
+      // Convert to CSV format for display
+      const csvContent = patches.map((p: PatchEntry) => `${p.from},${p.to}`).join("\n")
+      setCsvData(csvContent)
+
       toast({ title: "Patch map loaded successfully" })
     } catch (error) {
-      // Set safe default on error
       setPatchMap([])
+      setCsvData("")
       toast({
         title: "Error loading patch map",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -40,13 +46,24 @@ export function PatchMapManager() {
     }
   }
 
-  const savePatchMap = async () => {
+  const savePatchMapCSV = async () => {
     setLoading(true)
     try {
-      await apiFetch<void>("patchmap", {
-        method: "POST",
-        body: JSON.stringify(patchMap || []),
-      })
+      await apiUploadCSV<void>("patch/csv", csvData)
+
+      // Parse CSV to update local state
+      const lines = csvData
+        .trim()
+        .split("\n")
+        .filter((line) => line.trim())
+      const patches = lines
+        .map((line) => {
+          const [from, to] = line.split(",").map((s) => Number.parseInt(s.trim()))
+          return { from, to }
+        })
+        .filter((p) => !isNaN(p.from) && !isNaN(p.to))
+
+      setPatchMap(patches)
       toast({ title: "Patch map saved successfully" })
     } catch (error) {
       toast({
@@ -59,19 +76,32 @@ export function PatchMapManager() {
     }
   }
 
-  const exportCsv = async () => {
+  const clearPatchMap = async () => {
+    setLoading(true)
     try {
-      const data = await apiFetch<PatchEntry[]>("patchmap")
-      const safeData = Array.isArray(data) ? data : []
-      downloadCsv(safeData, `patchmap-${new Date().toISOString().split("T")[0]}.csv`)
-      toast({ title: "Patch map exported successfully" })
+      await apiUploadCSV<void>("patch/csv", "")
+      setPatchMap([])
+      setCsvData("")
+      toast({ title: "Patch map cleared successfully" })
     } catch (error) {
       toast({
-        title: "Error exporting patch map",
+        title: "Error clearing patch map",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
+  }
+
+  const exportCsv = () => {
+    if (patchMap.length === 0) {
+      toast({ title: "No patch data to export", variant: "destructive" })
+      return
+    }
+
+    downloadCsv(patchMap, `patchmap-${new Date().toISOString().split("T")[0]}.csv`)
+    toast({ title: "Patch map exported successfully" })
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,22 +113,16 @@ export function PatchMapManager() {
       return
     }
 
-    const formData = new FormData()
-    formData.append("file", file)
-
-    setLoading(true)
     try {
-      await apiUpload<void>("config", formData)
-      await loadPatchMap()
-      toast({ title: "CSV imported successfully" })
+      const content = await file.text()
+      setCsvData(content)
+      toast({ title: "CSV file loaded. Click 'Save CSV' to apply changes." })
     } catch (error) {
       toast({
-        title: "Error importing CSV",
+        title: "Error reading file",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
 
     if (fileInputRef.current) {
@@ -107,29 +131,39 @@ export function PatchMapManager() {
   }
 
   const addEntry = () => {
-    if (!validateChannel(newEntry.fromChannel) || !validateChannel(newEntry.toChannel)) {
+    if (!validateChannel(newEntry.from) || !validateChannel(newEntry.to)) {
       toast({ title: "Channels must be between 1-512", variant: "destructive" })
       return
     }
 
-    setPatchMap((prev) => [...(prev || []), newEntry])
-    setNewEntry({ fromChannel: 1, toChannel: 1 })
+    const newCsvLine = `${newEntry.from},${newEntry.to}`
+    const updatedCsv = csvData ? `${csvData}\n${newCsvLine}` : newCsvLine
+    setCsvData(updatedCsv)
+
+    setPatchMap((prev) => [...prev, newEntry])
+    setNewEntry({ from: 1, to: 1 })
   }
 
   const removeEntry = (index: number) => {
-    setPatchMap((prev) => (prev || []).filter((_, i) => i !== index))
+    const lines = csvData.split("\n").filter((line) => line.trim())
+    lines.splice(index, 1)
+    setCsvData(lines.join("\n"))
+
+    setPatchMap((prev) => prev.filter((_, i) => i !== index))
   }
 
   const updateEntry = (index: number, updates: Partial<PatchEntry>) => {
-    setPatchMap((prev) => (prev || []).map((entry, i) => (i === index ? { ...entry, ...updates } : entry)))
+    const lines = csvData.split("\n").filter((line) => line.trim())
+    const updatedEntry = { ...patchMap[index], ...updates }
+    lines[index] = `${updatedEntry.from},${updatedEntry.to}`
+    setCsvData(lines.join("\n"))
+
+    setPatchMap((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...updates } : entry)))
   }
 
   useEffect(() => {
     loadPatchMap()
   }, [])
-
-  // Safe access to patch map array
-  const safePatchMap = patchMap || []
 
   return (
     <div className="space-y-6">
@@ -141,31 +175,47 @@ export function PatchMapManager() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Reload
           </Button>
-          <Button onClick={exportCsv} variant="outline" disabled={loading}>
+          <Button onClick={exportCsv} variant="outline" disabled={loading || patchMap.length === 0}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={savePatchMap} disabled={loading}>
+          <Button onClick={savePatchMapCSV} disabled={loading}>
             <Save className="h-4 w-4 mr-2" />
-            Save
+            Save CSV
           </Button>
         </div>
       </div>
 
-      {/* Import/Export */}
+      {/* CSV Editor */}
       <Card>
         <CardHeader>
-          <CardTitle>Import/Export</CardTitle>
+          <CardTitle>CSV Patch Data</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
             <Button onClick={() => fileInputRef.current?.click()} variant="outline">
               <Upload className="h-4 w-4 mr-2" />
-              Import CSV
+              Load CSV File
+            </Button>
+            <Button onClick={clearPatchMap} variant="outline" disabled={loading}>
+              Clear All
             </Button>
             <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
           </div>
-          <p className="text-sm text-muted-foreground">CSV format: fromChannel,toChannel (one mapping per line)</p>
+
+          <div>
+            <Label htmlFor="csv-data">CSV Data (from,to format)</Label>
+            <Textarea
+              id="csv-data"
+              value={csvData}
+              onChange={(e) => setCsvData(e.target.value)}
+              placeholder="1,389&#10;2,390&#10;3,391"
+              className="font-mono text-sm min-h-[200px]"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Format: one mapping per line as "from,to" (e.g., "1,389")
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -186,10 +236,8 @@ export function PatchMapManager() {
                 type="number"
                 min="1"
                 max="512"
-                value={newEntry.fromChannel}
-                onChange={(e) =>
-                  setNewEntry((prev) => ({ ...prev, fromChannel: Number.parseInt(e.target.value) || 1 }))
-                }
+                value={newEntry.from}
+                onChange={(e) => setNewEntry((prev) => ({ ...prev, from: Number.parseInt(e.target.value) || 1 }))}
               />
             </div>
             <div>
@@ -199,8 +247,8 @@ export function PatchMapManager() {
                 type="number"
                 min="1"
                 max="512"
-                value={newEntry.toChannel}
-                onChange={(e) => setNewEntry((prev) => ({ ...prev, toChannel: Number.parseInt(e.target.value) || 1 }))}
+                value={newEntry.to}
+                onChange={(e) => setNewEntry((prev) => ({ ...prev, to: Number.parseInt(e.target.value) || 1 }))}
               />
             </div>
             <div className="flex items-end">
@@ -212,15 +260,15 @@ export function PatchMapManager() {
         </CardContent>
       </Card>
 
-      {/* Patch Map Table */}
+      {/* Current Patch Map */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Patch Map ({safePatchMap.length} entries)</CardTitle>
+          <CardTitle>Current Patch Map ({patchMap.length} entries)</CardTitle>
         </CardHeader>
         <CardContent>
-          {safePatchMap.length === 0 ? (
+          {patchMap.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
-              No patch mappings configured. Add a mapping or import a CSV file.
+              No patch mappings configured. Add mappings using CSV data or the form above.
             </p>
           ) : (
             <div className="space-y-2">
@@ -229,21 +277,21 @@ export function PatchMapManager() {
                 <div>To Channel</div>
                 <div>Actions</div>
               </div>
-              {safePatchMap.map((entry, index) => (
+              {patchMap.map((entry, index) => (
                 <div key={index} className="grid grid-cols-3 gap-4 p-3 border rounded-lg items-center">
                   <Input
                     type="number"
                     min="1"
                     max="512"
-                    value={entry?.fromChannel || ""}
-                    onChange={(e) => updateEntry(index, { fromChannel: Number.parseInt(e.target.value) || 1 })}
+                    value={entry?.from || ""}
+                    onChange={(e) => updateEntry(index, { from: Number.parseInt(e.target.value) || 1 })}
                   />
                   <Input
                     type="number"
                     min="1"
                     max="512"
-                    value={entry?.toChannel || ""}
-                    onChange={(e) => updateEntry(index, { toChannel: Number.parseInt(e.target.value) || 1 })}
+                    value={entry?.to || ""}
+                    onChange={(e) => updateEntry(index, { to: Number.parseInt(e.target.value) || 1 })}
                   />
                   <Button variant="outline" size="sm" onClick={() => removeEntry(index)}>
                     <Trash2 className="h-4 w-4" />

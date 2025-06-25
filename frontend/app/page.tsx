@@ -6,7 +6,8 @@ import { SidebarNav } from "@/components/sidebar-nav"
 import { ConfigEditor } from "@/components/config-editor"
 import { PatchMapManager } from "@/components/patch-map-manager"
 import { MonitoringDashboard } from "@/components/monitoring-dashboard"
-import { EntitySimulator } from "@/components/entity-simulator"
+import { FakerManager } from "@/components/faker-manager"
+import { StreamManager } from "@/components/stream-manager"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export default function LEDRoutingApp() {
@@ -20,8 +21,10 @@ export default function LEDRoutingApp() {
         return <PatchMapManager />
       case "monitor":
         return <MonitoringDashboard />
-      case "simulator":
-        return <EntitySimulator />
+      case "faker":
+        return <FakerManager />
+      case "stream":
+        return <StreamManager />
       default:
         return <ConfigEditor />
     }
@@ -33,7 +36,7 @@ export default function LEDRoutingApp() {
         {/* Header */}
         <header className="border-b">
           <div className="flex h-16 items-center px-6">
-            <h1 className="text-xl font-bold">LED Routing Controller</h1>
+            <h1 className="text-xl font-bold">LED Router Controller</h1>
             <div className="ml-auto">
               <ThemeToggle />
             </div>

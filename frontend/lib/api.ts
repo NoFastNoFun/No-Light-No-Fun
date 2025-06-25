@@ -4,7 +4,7 @@
 
 /**
  * Fetch wrapper with configurable base URL
- * @param path - API endpoint path (e.g., "config", "patchmap")
+ * @param path - API endpoint path (e.g., "config", "patch/csv")
  * @param init - Fetch options
  * @returns Promise with typed response data
  */
@@ -27,7 +27,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const response = await fetch(url, options)
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+      const errorText = await response.text()
+      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`)
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return {} as T
     }
 
     // Handle empty responses
@@ -66,16 +72,23 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`
 
   const options: RequestInit = {
-    method: "PUT",
+    method: "POST",
     credentials: base ? "omit" : "include",
     body: formData,
+    // Don't set Content-Type header for multipart/form-data
   }
 
   try {
     const response = await fetch(url, options)
 
     if (!response.ok) {
-      throw new Error(`API upload failed: ${response.status} ${response.statusText}`)
+      const errorText = await response.text()
+      throw new Error(`API upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return {} as T
     }
 
     // Handle empty responses
@@ -97,6 +110,47 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
     }
   } catch (error) {
     console.error("API upload error:", error)
+    throw error
+  }
+}
+
+/**
+ * Upload CSV data as text
+ * @param path - API endpoint path
+ * @param csvData - CSV content as string
+ * @returns Promise with typed response data
+ */
+export async function apiUploadCSV<T>(path: string, csvData: string): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
+  const cleanBase = base.replace(/\/+$/, "")
+  const cleanPath = path.replace(/^\/+/, "")
+  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`
+
+  const options: RequestInit = {
+    method: "POST",
+    credentials: base ? "omit" : "include",
+    headers: {
+      "Content-Type": "text/csv",
+    },
+    body: csvData,
+  }
+
+  try {
+    const response = await fetch(url, options)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`CSV upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return {} as T
+    }
+
+    return {} as T
+  } catch (error) {
+    console.error("CSV upload error:", error)
     throw error
   }
 }

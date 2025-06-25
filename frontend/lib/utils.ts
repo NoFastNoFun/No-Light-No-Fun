@@ -115,10 +115,10 @@ export function formatTimestamp(ts: number): string {
 }
 
 /**
- * Validate DMX universe (1-32768)
+ * Validate DMX universe (0-200 for this system)
  */
 export function validateUniverse(universe: number): boolean {
-  return Number.isInteger(universe) && universe >= 1 && universe <= 32768
+  return Number.isInteger(universe) && universe >= 0 && universe <= 200
 }
 
 /**

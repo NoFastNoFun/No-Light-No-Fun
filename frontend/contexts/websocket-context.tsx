@@ -36,9 +36,10 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || ""
+    // Use the actual WebSocket endpoints from the API
     const wsUrl = baseUrl
-      ? `${baseUrl.replace(/^http/, "ws")}/api/ws`
-      : process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/api/ws"
+      ? `${baseUrl.replace(/^http/, "ws")}/ws/ehub`
+      : process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws/ehub"
 
     try {
       const ws = new WebSocket(wsUrl)
@@ -51,39 +52,48 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
       ws.onmessage = (event) => {
         try {
-          const message: WSMessage = JSON.parse(event.data)
+          // Handle both JSON and binary messages
+          if (typeof event.data === "string") {
+            const message: WSMessage = JSON.parse(event.data)
 
-          // Handle null/undefined message or missing properties
-          if (!message || typeof message !== "object") {
-            console.warn("Received invalid WebSocket message:", message)
-            return
-          }
-
-          if (message.type === "cfg") {
-            const configMsg = message as ConfigPacketMessage
-            const safeConfigMsg: ConfigPacketMessage = {
-              type: "cfg",
-              len: configMsg?.len || 0,
+            if (!message || typeof message !== "object") {
+              console.warn("Received invalid WebSocket message:", message)
+              return
             }
-            setConfigPackets((prev) => [safeConfigMsg, ...(prev || []).slice(0, 99)])
-            setStats((prev) => ({
-              ...prev,
-              totalConfigPackets: (prev?.totalConfigPackets || 0) + 1,
-              lastConfigPacketSize: safeConfigMsg.len,
-            }))
+
+            if (message.type === "cfg") {
+              const configMsg = message as ConfigPacketMessage
+              const safeConfigMsg: ConfigPacketMessage = {
+                type: "cfg",
+                len: configMsg?.len || 0,
+              }
+              setConfigPackets((prev) => [safeConfigMsg, ...(prev || []).slice(0, 99)])
+              setStats((prev) => ({
+                ...prev,
+                totalConfigPackets: (prev?.totalConfigPackets || 0) + 1,
+                lastConfigPacketSize: safeConfigMsg.len,
+              }))
+            }
           } else {
-            const artNetMsg = message as ArtNetMessage
-            const safeArtNetMsg: ArtNetMessage = {
-              ip: artNetMsg?.ip || "unknown",
-              universe: artNetMsg?.universe || 0,
-              channels: artNetMsg?.channels || 0,
-              ts: artNetMsg?.ts || Date.now(),
+            // Handle binary data (DMX/Art-Net frames)
+            const buffer = new Uint8Array(event.data)
+            if (buffer.length >= 2) {
+              const universe = (buffer[0] << 8) | buffer[1] // Big endian
+              const channels = buffer.length - 2
+
+              const artNetMsg: ArtNetMessage = {
+                ip: "binary-data",
+                universe: universe,
+                channels: channels,
+                ts: Date.now(),
+              }
+
+              setArtNetMessages((prev) => [artNetMsg, ...(prev || []).slice(0, 99)])
+              setStats((prev) => ({
+                ...prev,
+                totalArtNetMessages: (prev?.totalArtNetMessages || 0) + 1,
+              }))
             }
-            setArtNetMessages((prev) => [safeArtNetMsg, ...(prev || []).slice(0, 99)])
-            setStats((prev) => ({
-              ...prev,
-              totalArtNetMessages: (prev?.totalArtNetMessages || 0) + 1,
-            }))
           }
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error)

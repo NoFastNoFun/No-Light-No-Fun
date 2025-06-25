@@ -42,6 +42,29 @@ export function MonitoringDashboard() {
         </div>
       </div>
 
+      {/* Connection Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>WebSocket Connection</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Endpoint:</span>
+              <span className="font-mono">/ws/ehub</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Status:</span>
+              <Badge variant={connected ? "default" : "secondary"}>{connected ? "Connected" : "Disconnected"}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4">
+              Enable monitoring in the Configuration Editor to receive real-time data. Available endpoints: /ws/ehub
+              (JSON), /ws/dmx (binary), /ws/artnet-in (binary)
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -61,7 +84,7 @@ export function MonitoringDashboard() {
             <div className="flex items-center gap-3">
               <Activity className="h-5 w-5 text-green-500" />
               <div>
-                <p className="text-sm font-medium">Art-Net Messages</p>
+                <p className="text-sm font-medium">Binary Messages</p>
                 <p className="text-2xl font-bold">{safeStats.totalArtNetMessages}</p>
               </div>
             </div>
@@ -86,7 +109,7 @@ export function MonitoringDashboard() {
         {/* Incoming eHub Config Pane */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Incoming eHub Config</CardTitle>
+            <CardTitle>eHub Messages (JSON)</CardTitle>
             <div className="flex items-center space-x-2">
               <Switch id="auto-scroll-config" checked={autoScroll} onCheckedChange={setAutoScroll} />
               <Label htmlFor="auto-scroll-config" className="text-sm">
@@ -115,13 +138,13 @@ export function MonitoringDashboard() {
           </CardContent>
         </Card>
 
-        {/* Outgoing Art-Net Pane */}
+        {/* Binary Data Pane */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Outgoing Art-Net</CardTitle>
+            <CardTitle>Binary Messages (DMX/Art-Net)</CardTitle>
             <div className="flex items-center space-x-2">
-              <Switch id="auto-scroll-artnet" checked={autoScroll} onCheckedChange={setAutoScroll} />
-              <Label htmlFor="auto-scroll-artnet" className="text-sm">
+              <Switch id="auto-scroll-binary" checked={autoScroll} onCheckedChange={setAutoScroll} />
+              <Label htmlFor="auto-scroll-binary" className="text-sm">
                 Auto-scroll
               </Label>
             </div>
@@ -130,13 +153,13 @@ export function MonitoringDashboard() {
             <ScrollArea className="h-96">
               <div className="space-y-2">
                 {safeArtNetMessages.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No Art-Net messages sent yet</p>
+                  <p className="text-center text-muted-foreground py-8">No binary messages received yet</p>
                 ) : (
                   <div className="space-y-1">
                     {/* Table Header */}
                     <div className="grid grid-cols-4 gap-2 p-2 bg-muted rounded text-xs font-semibold">
                       <div>Time</div>
-                      <div>IP</div>
+                      <div>Source</div>
                       <div>Universe</div>
                       <div>Channels</div>
                     </div>

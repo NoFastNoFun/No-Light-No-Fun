@@ -228,10 +228,23 @@ export function LEDConfigProvider({ children }: { children: React.ReactNode }) {
   const loadConfig = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true })
     try {
-      const data = await apiFetch<SystemConfig>("config")
-      dispatch({ type: "SET_CONFIG", payload: data })
+      const data = await apiFetch<any>("config")
+      // Convert backend config to our frontend format
+      const frontendConfig: SystemConfig = {
+        receivers: [],
+        entities: [],
+        patchMaps: [],
+        activePatchMapId: undefined,
+        settings: {
+          websocketUrl: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws/ehub",
+          apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080",
+          autoReconnect: true,
+          monitoringInterval: 1000,
+          maxLogEntries: 1000,
+        },
+      }
+      dispatch({ type: "SET_CONFIG", payload: frontendConfig })
     } catch (error) {
-      // Set safe default config on error
       dispatch({ type: "SET_CONFIG", payload: defaultConfig })
       dispatch({ type: "SET_ERROR", payload: error instanceof Error ? error.message : "Unknown error" })
     }
@@ -243,9 +256,24 @@ export function LEDConfigProvider({ children }: { children: React.ReactNode }) {
   const saveConfig = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true })
     try {
+      // Convert frontend config to backend format
+      const backendConfig = {
+        groups: {},
+        universes: {},
+        routes: [],
+        mapping: [],
+        patch: [],
+        max_fps: 40,
+        ehub_port: 7000,
+        artnet_port: 6454,
+        monitor_ehub: false,
+        monitor_dmx: false,
+        monitor_artnet_rx: false,
+      }
+
       await apiFetch<void>("config", {
-        method: "POST",
-        body: JSON.stringify(state.config || defaultConfig),
+        method: "PUT",
+        body: JSON.stringify(backendConfig),
       })
       dispatch({ type: "SET_LOADING", payload: false })
     } catch (error) {

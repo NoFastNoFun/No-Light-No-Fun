@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Settings, Monitor, Shuffle, Map } from "lucide-react"
+import { Settings, Monitor, Map, Palette, Video } from 'lucide-react'
 
 interface SidebarNavProps {
   activeTab: string
@@ -13,7 +13,8 @@ const navItems = [
   { id: "config", label: "Config Editor", icon: Settings },
   { id: "patchmap", label: "Patch Map", icon: Map },
   { id: "monitor", label: "Monitor", icon: Monitor },
-  { id: "simulator", label: "Simulator", icon: Shuffle },
+  { id: "faker", label: "Faker Patterns", icon: Palette },
+  { id: "stream", label: "Stream Manager", icon: Video },
 ]
 
 export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {

@@ -25,7 +25,7 @@ export function EntityConfigPanel() {
     type: "LED Strip",
     enabled: true,
     dmxConfig: {
-      universe: 1,
+      universe: 0,
       startChannel: 1,
       channelCount: 4,
       rgbwFilter: {
@@ -65,7 +65,7 @@ export function EntityConfigPanel() {
       type: "LED Strip",
       enabled: true,
       dmxConfig: {
-        universe: 1,
+        universe: 0,
         startChannel: 1,
         channelCount: 4,
         rgbwFilter: {
@@ -183,19 +183,19 @@ export function EntityConfigPanel() {
           {/* DMX Configuration */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
             <div>
-              <Label htmlFor="dmx-universe">DMX Universe</Label>
+              <Label htmlFor="dmx-universe">DMX Universe (0-200)</Label>
               <Input
                 id="dmx-universe"
                 type="number"
-                min="1"
-                max="32768"
-                value={newEntity.dmxConfig?.universe || 1}
+                min="0"
+                max="200"
+                value={newEntity.dmxConfig?.universe ?? 0}
                 onChange={(e) =>
                   setNewEntity((prev) => ({
                     ...prev,
                     dmxConfig: {
                       ...prev.dmxConfig!,
-                      universe: Number.parseInt(e.target.value) || 1,
+                      universe: Number.parseInt(e.target.value) || 0,
                     },
                   }))
                 }
@@ -203,7 +203,7 @@ export function EntityConfigPanel() {
             </div>
 
             <div>
-              <Label htmlFor="dmx-channel">Start Channel</Label>
+              <Label htmlFor="dmx-channel">Start Channel (1-512)</Label>
               <Input
                 id="dmx-channel"
                 type="number"
