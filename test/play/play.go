@@ -316,3 +316,5 @@ func renderRaw(rgb []byte, total int, br float64, rot int, serp bool, port *int,
 		}
 	}
 }
+
+// how to run:
