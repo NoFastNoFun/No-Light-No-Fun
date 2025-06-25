@@ -318,3 +318,4 @@ func renderRaw(rgb []byte, total int, br float64, rot int, serp bool, port *int,
 }
 
 // how to run:
+// go run test/play/play.go -file /path/to/image.png -fps 30 -leds 16320 -port 6454 -brightness 0.5 -rotate 90 -serpentine

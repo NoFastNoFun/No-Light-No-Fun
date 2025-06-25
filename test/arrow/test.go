@@ -1,3 +1,8 @@
+// movepixel2d-parity streams one RGB LED that you can move with the
+// arrow keys (terminal or http://localhost:8090).  Even universes
+// show blue, odd universes show red.
+//
+//	go run movepixel2d_parity.go -cols 255 -leds 16320
 package main
 
 import (
@@ -22,7 +27,7 @@ const (
 	projectorIP  = "192.168.1.45"
 )
 
-// ---------- controller mapping ----------
+/* ---------- controller mapping ---------- */
 
 type controller struct {
 	ip          string
@@ -48,13 +53,13 @@ func universeToIP(u uint16) (string, bool) {
 	return "", false
 }
 
-// ---------- Art-Net helpers ----------
+/* ---------- Art-Net helpers ---------- */
 
 func artHeader(u uint16) []byte {
 	h := make([]byte, 18)
 	copy(h, "Art-Net\x00")
-	binary.LittleEndian.PutUint16(h[8:], 0x5000)
-	binary.BigEndian.PutUint16(h[10:], 14)
+	binary.LittleEndian.PutUint16(h[8:], 0x5000) // OpCode ArtDMX
+	binary.BigEndian.PutUint16(h[10:], 14)       // ProtVer
 	binary.LittleEndian.PutUint16(h[14:], u)
 	binary.BigEndian.PutUint16(h[16:], dmxSize)
 	return h
@@ -78,7 +83,7 @@ func send(u uint16, d []byte, conns map[string]*net.UDPConn, port int) {
 	c.Write(append(artHeader(u), d...))
 }
 
-// ---------- LED index mapping ----------
+/* ---------- LED index mapping ---------- */
 
 func mapLED(n int) (uint16, int) {
 	group := n / ledsPerPair
@@ -90,7 +95,7 @@ func mapLED(n int) (uint16, int) {
 	return even + 1, (offset - ledsPerFull) * 3
 }
 
-// ---------- main ----------
+/* ---------- main ---------- */
 
 func main() {
 	fps := flag.Float64("fps", 40, "frames per second")
@@ -99,9 +104,11 @@ func main() {
 	start := flag.Int("start", 0, "initial LED index (0-based)")
 	port := flag.Int("port", 6454, "Art-Net UDP port")
 	httpA := flag.String("http", ":8090", "HTTP listen addr ('' disables)")
-	r := flag.Uint("r", 255, "red 0-255")
-	g := flag.Uint("g", 255, "green 0-255")
-	b := flag.Uint("b", 255, "blue 0-255")
+
+	// Deprecated: colour now fixed by universe parity.
+	_ = flag.Uint("r", 0, "deprecated, ignored")
+	_ = flag.Uint("g", 0, "deprecated, ignored")
+	_ = flag.Uint("b", 0, "deprecated, ignored")
 	flag.Parse()
 
 	if *fps <= 0 || *cols <= 0 || *start < 0 || *start >= *leds {
@@ -173,14 +180,18 @@ func main() {
 				prev = cur
 			}
 
-			/* draw cur */
+			/* draw cur with parity-based colour */
 			u, ch := mapLED(cur)
 			if u != projectorUni {
 				buf := make([]byte, dmxSize)
+				var r, g, b uint8
+				if u%2 == 0 { // even universe → blue
+					r, g, b = 0, 0, 255
+				} else { // odd universe → red
+					r, g, b = 255, 0, 0
+				}
 				if ch+2 < dmxSize {
-					buf[ch] = uint8(*r)
-					buf[ch+1] = uint8(*g)
-					buf[ch+2] = uint8(*b)
+					buf[ch], buf[ch+1], buf[ch+2] = r, g, b
 				}
 				frames[u] = buf
 			}
@@ -192,7 +203,7 @@ func main() {
 	}
 }
 
-/* --- helpers --- */
+/* ---------- helpers ---------- */
 
 func page(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

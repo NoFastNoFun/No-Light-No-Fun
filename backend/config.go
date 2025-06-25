@@ -144,49 +144,64 @@ func parsePatchCSV(r io.Reader) ([]Patch, error) {
 /* ---------- route expander ---------- */
 
 func expandRoutes(c *Config) {
-	var out []MapEntry
+	const (
+		bytesPerLED  = 3
+		evenCapBytes = 170 * bytesPerLED // 510
+		oddCapBytes  = 85 * bytesPerLED  // 255
+	)
 
 	parseRange := func(s string) (uint32, uint32) {
-		if strings.Contains(s, "-") {
-			parts := strings.SplitN(s, "-", 2)
-			a, _ := strconv.ParseUint(parts[0], 10, 32)
-			b, _ := strconv.ParseUint(parts[1], 10, 32)
+		if dash := strings.IndexByte(s, '-'); dash > 0 {
+			a, _ := strconv.ParseUint(s[:dash], 10, 32)
+			b, _ := strconv.ParseUint(s[dash+1:], 10, 32)
 			return uint32(a), uint32(b)
 		}
 		v, _ := strconv.ParseUint(s, 10, 32)
 		return uint32(v), uint32(v)
 	}
 
+	var out []MapEntry
+
 	for _, rt := range c.Routes {
 		ranges := c.Groups[rt.Group]
 		destSet := c.Universes[rt.UniBank]
 		if len(ranges) == 0 || len(destSet) == 0 {
-			continue
+			continue // wrong names → skip
 		}
 
-		chanPos := int(rt.Channel - 1) // zero-based
 		uniIdx := 0
+		chanPos := int(rt.Channel - 1) // zero-based within current universe
+		capBytes := func(u uint16) int {
+			if u%2 == 0 {
+				return evenCapBytes
+			}
+			return oddCapBytes
+		}
 
 		for _, r := range ranges {
 			from, to := parseRange(r)
-			for e := from; e <= to; e++ {
-				if chanPos+3 > dmxSize {
+			for ent := from; ent <= to; ent++ {
+
+				// ensure we have a universe and space for 1 LED (=3 bytes)
+				for uniIdx < len(destSet) &&
+					chanPos+bytesPerLED > capBytes(destSet[uniIdx].Universe) {
 					uniIdx++
-					chanPos = 0
+					chanPos = int(rt.Channel - 1) // restart offset for next universe
 				}
 				if uniIdx >= len(destSet) {
-					break
+					break // no more destinations available
 				}
+
 				dst := destSet[uniIdx]
 				out = append(out, MapEntry{
-					Entity:     e,
+					Entity:     ent,
 					Controller: dst.IP,
 					Universe:   dst.Universe,
-					Channel:    uint16(chanPos + 1),
+					Channel:    uint16(chanPos + 1), // convert back to 1-based
 					SelectRGBW: rt.Select,
 					Enable:     rt.Enable,
 				})
-				chanPos += 3
+				chanPos += bytesPerLED
 			}
 		}
 	}
