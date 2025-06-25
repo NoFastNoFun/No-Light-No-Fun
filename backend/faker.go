@@ -19,11 +19,12 @@ var fake = &faker{}
 /* start / stop from REST */
 
 type fakerReq struct {
-	Mode  string   `json:"mode"` // "solid" | "chase"
-	From  uint32   `json:"from"`
-	To    uint32   `json:"to"`
-	Color [3]uint8 `json:"color"`         // [R,G,B]
-	FPS   float64  `json:"fps,omitempty"` // only for chase
+	Mode       string   `json:"mode"` // "solid" | "chase"
+	From       uint32   `json:"from"`
+	To         uint32   `json:"to"`
+	Color      [3]uint8 `json:"color"`                // [R,G,B]
+	FPS        float64  `json:"fps,omitempty"`        // only for chase
+	Brightness float64  `json:"brightness,omitempty"` // 0..1, default = 1
 }
 
 func (f *faker) start(r fakerReq) error {
@@ -62,7 +63,15 @@ func (f *faker) stop() {
 /* ---------- pattern impl ---------- */
 
 func fakerSolid(ctx context.Context, req fakerReq) {
-	col := RGB{req.Color[0], req.Color[1], req.Color[2]}
+	br := req.Brightness
+	if br <= 0 || br > 1 {
+		br = 1 // default = full
+	}
+	col := RGB{
+		uint8(float64(req.Color[0]) * br),
+		uint8(float64(req.Color[1]) * br),
+		uint8(float64(req.Color[2]) * br),
+	}
 	for i := req.From; i <= req.To; i++ {
 		ehubChan <- eHuBUpdate{EntityID: i, Color: col}
 	}
@@ -82,7 +91,15 @@ func fakerSolid(ctx context.Context, req fakerReq) {
 }
 
 func fakerChase(ctx context.Context, req fakerReq) {
-	col := RGB{req.Color[0], req.Color[1], req.Color[2]}
+	br := req.Brightness
+	if br <= 0 || br > 1 {
+		br = 1 // default = full
+	}
+	col := RGB{
+		uint8(float64(req.Color[0]) * br),
+		uint8(float64(req.Color[1]) * br),
+		uint8(float64(req.Color[2]) * br),
+	}
 	off := RGB{0, 0, 0}
 	fps := req.FPS
 	if fps <= 0 {
