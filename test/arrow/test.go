@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-/* ---------- constants ---------- */
-
 const (
 	dmxSize      = 512
 	ledsPerHalf  = 85
@@ -22,11 +20,9 @@ const (
 	ledsPerPair  = 255
 	projectorUni = 200
 	projectorIP  = "192.168.1.45"
-
-	groupSize = 128 // size of one colour block (in right-arrow direction)
 )
 
-/* ---------- controller mapping ---------- */
+// ---------- controller mapping ----------
 
 type controller struct {
 	ip          string
@@ -52,7 +48,7 @@ func universeToIP(u uint16) (string, bool) {
 	return "", false
 }
 
-/* ---------- Art-Net helpers ---------- */
+// ---------- Art-Net helpers ----------
 
 func artHeader(u uint16) []byte {
 	h := make([]byte, 18)
@@ -82,7 +78,7 @@ func send(u uint16, d []byte, conns map[string]*net.UDPConn, port int) {
 	c.Write(append(artHeader(u), d...))
 }
 
-/* ---------- LED index mapping ---------- */
+// ---------- LED index mapping ----------
 
 func mapLED(n int) (uint16, int) {
 	group := n / ledsPerPair
@@ -94,14 +90,7 @@ func mapLED(n int) (uint16, int) {
 	return even + 1, (offset - ledsPerFull) * 3
 }
 
-/* ---------- helpers ---------- */
-
-// invertRGB returns the exact opposite colour on the RGB cube.
-func invertRGB(r, g, b uint8) (uint8, uint8, uint8) {
-	return 255 - r, 255 - g, 255 - b
-}
-
-/* ---------- main ---------- */
+// ---------- main ----------
 
 func main() {
 	fps := flag.Float64("fps", 40, "frames per second")
@@ -184,16 +173,14 @@ func main() {
 				prev = cur
 			}
 
-			/* draw cur (with colour alternating every 128 LEDs) */
+			/* draw cur */
 			u, ch := mapLED(cur)
 			if u != projectorUni {
 				buf := make([]byte, dmxSize)
 				if ch+2 < dmxSize {
-					rr, gg, bb := uint8(*r), uint8(*g), uint8(*b)
-					if (cur/groupSize)%2 == 1 { // odd block → invert colour
-						rr, gg, bb = invertRGB(rr, gg, bb)
-					}
-					buf[ch], buf[ch+1], buf[ch+2] = rr, gg, bb
+					buf[ch] = uint8(*r)
+					buf[ch+1] = uint8(*g)
+					buf[ch+2] = uint8(*b)
 				}
 				frames[u] = buf
 			}
@@ -205,7 +192,7 @@ func main() {
 	}
 }
 
-/* ---------- web UI ---------- */
+/* --- helpers --- */
 
 func page(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -225,8 +212,6 @@ document.addEventListener('keydown',e=>{
 });
 </script></body></html>`))
 }
-
-/* ---------- keyboard helper ---------- */
 
 func arrows(px *int64, cols int) {
 	buf := make([]byte, 3)
@@ -261,6 +246,3 @@ func arrows(px *int64, cols int) {
 		}
 	}
 }
-
-// how to run:
-// go run main.go -fps 30 -cols 255 -start 0 -port 6454 -http :8090 -r 255 -g 0 -b 0
