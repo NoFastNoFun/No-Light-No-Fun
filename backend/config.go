@@ -81,7 +81,7 @@ var (
 func defaultConfig() Config {
 	return Config{
 		MaxFPS:     40,
-		EhubPort:   7000,
+		EhubPort:   8765,
 		ArtNetPort: 6454,
 	}
 }

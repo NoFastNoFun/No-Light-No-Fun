@@ -201,6 +201,6 @@
 
   "patch": [],
   "max_fps": 30,
-  "ehub_port": 7000,
+  "ehub_port": 8765,
   "artnet_port": 6454
 }
