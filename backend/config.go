@@ -34,7 +34,7 @@ type RouteSpec struct {
 	Enable  bool   `json:"enable"`
 }
 
-/* router’s internal, flattened mapping */
+/* router's internal, flattened mapping */
 
 type MapEntry struct {
 	Entity      uint32

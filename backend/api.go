@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/gorilla/websocket"
 )
 
@@ -92,11 +93,17 @@ func wsArtIn(w http.ResponseWriter, r *http.Request) {
 
 func buildRouter() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger, middleware.Recoverer)
 
-	// Allow OPTIONS requests for CORS
-	r.Use(middleware.AllowContentType("application/json"))
-	r.Use(corsMiddleware) // Add CORS middleware
+	// CORS: allow everything from any origin
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
+	r.Use(middleware.Logger, middleware.Recoverer)
 
 	r.Get("/api/config", getConfig)
 	r.Put("/api/config", putConfig)
@@ -111,20 +118,4 @@ func buildRouter() http.Handler {
 	r.Get("/ws/artnet-in", wsArtIn)
 
 	return r
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		// Handle preflight requests
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }

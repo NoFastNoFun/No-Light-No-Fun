@@ -8,12 +8,14 @@
  * @param init - Fetch options
  * @returns Promise with typed response data
  */
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = process.env.NEXT_PUBLIC_API_URL || ""
-  const cleanBase = base.replace(/\/+$/, "")
-  const cleanPath = path.replace(/^\/+/, "")
-  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`
-
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_URL || "";
+  const cleanBase = base.replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`;
   const options: RequestInit = {
     ...init,
     credentials: base ? "omit" : "include",
@@ -21,41 +23,23 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       "Content-Type": "application/json",
       ...init?.headers,
     },
-  }
+  };
+  const response = await fetch(url, options);
 
+  console.log("[apiFetch] status:", response.status);
+  console.log("[apiFetch] content-type:", response.headers.get("content-type"));
+
+  const text = await response.text();
+  console.log("[apiFetch] raw response text:", text);
+
+  // ensuite tu peux essayer de parser
   try {
-    const response = await fetch(url, options)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`)
-    }
-
-    // Handle 204 No Content responses
-    if (response.status === 204) {
-      return {} as T
-    }
-
-    // Handle empty responses
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      return {} as T
-    }
-
-    const text = await response.text()
-    if (!text.trim()) {
-      return {} as T
-    }
-
-    try {
-      return JSON.parse(text)
-    } catch (parseError) {
-      console.warn("Failed to parse JSON response:", text)
-      return {} as T
-    }
-  } catch (error) {
-    console.error("API fetch error:", error)
-    throw error
+    const data = JSON.parse(text);
+    console.log("[apiFetch] parsed JSON:", data);
+    return data as T;
+  } catch (parseError) {
+    console.error("[apiFetch] JSON parse error", parseError);
+    throw new Error("Invalid JSON received from " + url);
   }
 }
 
@@ -65,52 +49,57 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
  * @param formData - Form data to upload
  * @returns Promise with typed response data
  */
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const base = process.env.NEXT_PUBLIC_API_URL || ""
-  const cleanBase = base.replace(/\/+$/, "")
-  const cleanPath = path.replace(/^\/+/, "")
-  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_URL || "";
+  const cleanBase = base.replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`;
 
   const options: RequestInit = {
     method: "POST",
     credentials: base ? "omit" : "include",
     body: formData,
     // Don't set Content-Type header for multipart/form-data
-  }
+  };
 
   try {
-    const response = await fetch(url, options)
+    const response = await fetch(url, options);
 
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`API upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+      const errorText = await response.text();
+      throw new Error(
+        `API upload failed: ${response.status} ${response.statusText} - ${errorText}`
+      );
     }
 
     // Handle 204 No Content responses
     if (response.status === 204) {
-      return {} as T
+      return {} as T;
     }
 
     // Handle empty responses
-    const contentType = response.headers.get("content-type")
+    const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-      return {} as T
+      return {} as T;
     }
 
-    const text = await response.text()
+    const text = await response.text();
     if (!text.trim()) {
-      return {} as T
+      return {} as T;
     }
 
     try {
-      return JSON.parse(text)
+      return JSON.parse(text);
     } catch (parseError) {
-      console.warn("Failed to parse JSON response:", text)
-      return {} as T
+      console.warn("Failed to parse JSON response:", text);
+      return {} as T;
     }
   } catch (error) {
-    console.error("API upload error:", error)
-    throw error
+    console.error("API upload error:", error);
+    throw error;
   }
 }
 
@@ -120,11 +109,14 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
  * @param csvData - CSV content as string
  * @returns Promise with typed response data
  */
-export async function apiUploadCSV<T>(path: string, csvData: string): Promise<T> {
-  const base = process.env.NEXT_PUBLIC_API_URL || ""
-  const cleanBase = base.replace(/\/+$/, "")
-  const cleanPath = path.replace(/^\/+/, "")
-  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`
+export async function apiUploadCSV<T>(
+  path: string,
+  csvData: string
+): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_URL || "";
+  const cleanBase = base.replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  const url = base ? `${cleanBase}/api/${cleanPath}` : `/api/${cleanPath}`;
 
   const options: RequestInit = {
     method: "POST",
@@ -133,24 +125,26 @@ export async function apiUploadCSV<T>(path: string, csvData: string): Promise<T>
       "Content-Type": "text/csv",
     },
     body: csvData,
-  }
+  };
 
   try {
-    const response = await fetch(url, options)
+    const response = await fetch(url, options);
 
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`CSV upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+      const errorText = await response.text();
+      throw new Error(
+        `CSV upload failed: ${response.status} ${response.statusText} - ${errorText}`
+      );
     }
 
     // Handle 204 No Content responses
     if (response.status === 204) {
-      return {} as T
+      return {} as T;
     }
 
-    return {} as T
+    return {} as T;
   } catch (error) {
-    console.error("CSV upload error:", error)
-    throw error
+    console.error("CSV upload error:", error);
+    throw error;
   }
 }
