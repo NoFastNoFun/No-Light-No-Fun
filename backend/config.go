@@ -147,7 +147,7 @@ func expandRoutes(c *Config) {
 	const (
 		bytesPerLED  = 3
 		evenCapBytes = 170 * bytesPerLED // 510
-		oddCapBytes  = 85 * bytesPerLED  // 255
+		oddCapBytes  = 89 * bytesPerLED  // 255
 	)
 
 	parseRange := func(s string) (uint32, uint32) {
