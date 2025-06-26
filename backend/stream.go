@@ -19,48 +19,61 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
+/* ------------------------------------------------------------------ */
+/*  Wall geometry - identical to play.go                              */
+/* ------------------------------------------------------------------ */
+
 const (
 	gridW = 128
 	gridH = 128
+
+	ledsPerFull = 170 // even universe
+	ledsPerHalf = 85  // odd  universe
+	gapEven     = 0   // keep =0 because play.go uses 0 (the 6-px void is handled below)
+	missingOdd  = 0   // play.go value
+	ledsPerPair = ledsPerFull + ledsPerHalf
 )
 
-// stream.go   (same change applies if you copied rotXY elsewhere)
+/* ---------- rotation helper (play.go orientation) ---------- */
 func rotXY(x, y, deg int) (int, int) {
 	switch deg {
-	case 90: // now clockwise
-		return gridH - 1 - y, x
-	case 180: // unchanged
-		return gridW - 1 - x, gridH - 1 - y
-	case 270: // now counter-clockwise
+	case 90: // counter-clockwise (matches play.go)
 		return y, gridW - 1 - x
+	case 180:
+		return gridW - 1 - x, gridH - 1 - y
+	case 270: // clockwise
+		return gridH - 1 - y, x
 	default:
-		return x, y // 0°
+		return x, y
 	}
 }
 
-/* entity id 100 ⟶ LED index 0 (adjust if your first entity differs) */
-const entityOffset = 100
+/* ---------- mapping helpers (copied verbatim from play.go) ---------- */
 
 func ledToXY(idx int) (int, int, bool) {
-	pair := idx / 255 // 170+85 LEDs per 2 universes
-	off := idx % 255
+	pair := idx / ledsPerPair
+	off := idx % ledsPerPair
 	row := pair * 2
 
 	if off < gridW {
-		return row, off, true
+		return row, off, true // top row
 	}
-	off -= gridW
-	if off < 36 { // even-universe bottom segment
+	off -= gridW // into lower half
+
+	if off < ledsPerFull-gridW-gapEven { // 36 px driven by even universe
 		return row + 1, off, true
 	}
-	off -= 36 // skip the 6-px physical gap
-	if off >= 82 {
-		return 0, 0, false // last 3 LEDs in odd universe are absent
+	off -= ledsPerFull - gridW - gapEven // skip 6-px gap
+
+	if off >= ledsPerHalf-missingOdd { // last 3 LEDs of odd universe absent
+		return 0, 0, false
 	}
-	return row + 1, 36 + off, true
+	return row + 1, (ledsPerFull - gridW - gapEven) + off, true
 }
 
-/* ---------- streamer goroutine ---------- */
+/* ------------------------------------------------------------------ */
+/*  Streamer                                                          */
+/* ------------------------------------------------------------------ */
 
 type streamSpec struct {
 	Path       string
@@ -71,6 +84,8 @@ type streamSpec struct {
 	Loop       bool
 }
 
+const entityOffset = 100 // entity 100 → LED index 0
+
 func startStreamer(ctx context.Context, s streamSpec) error {
 	isStill := map[string]bool{
 		".png": true, ".jpg": true, ".jpeg": true,
@@ -78,7 +93,8 @@ func startStreamer(ctx context.Context, s streamSpec) error {
 	}[strings.ToLower(filepath.Ext(s.Path))]
 
 	delay := time.Second / time.Duration(s.FPS)
-	total := 19858 - entityOffset + 1 // entities you mapped
+	total := 19858 - entityOffset + 1 // number of entities mapped
+
 	br := s.Brightness
 	if br <= 0 || br > 1 {
 		br = 1
@@ -94,8 +110,6 @@ func startStreamer(ctx context.Context, s streamSpec) error {
 				col = gridW - 1 - col
 			}
 			x, y := rotXY(col, row, s.Rotate)
-
-			/* NEW guard: stay inside 128 × 128 frame */
 			if x < 0 || x >= gridW || y < 0 || y >= gridH {
 				continue
 			}
@@ -106,25 +120,28 @@ func startStreamer(ctx context.Context, s streamSpec) error {
 				g = uint8(float64(g) * br)
 				b = uint8(float64(b) * br)
 			}
-			eid := uint32(idx + entityOffset)
-			ehubChan <- eHuBUpdate{EntityID: eid, Color: RGB{r, g, b}}
+			ehubChan <- eHuBUpdate{
+				EntityID: uint32(idx + entityOffset),
+				Color:    RGB{r, g, b},
+			}
 		}
 	}
 
+	/* ---------------- still images ---------------- */
+
 	if isStill {
-		file, err := os.Open(s.Path)
+		f, err := os.Open(s.Path)
 		if err != nil {
 			return err
 		}
-		src, _, err := image.Decode(file)
-		file.Close()
+		src, _, err := image.Decode(f)
+		f.Close()
 		if err != nil {
 			return err
 		}
 		dst := image.NewRGBA(image.Rect(0, 0, gridW, gridH))
 		xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Src, nil)
 
-		// freeze-frame loop
 		go func() {
 			for {
 				select {
@@ -142,7 +159,8 @@ func startStreamer(ctx context.Context, s streamSpec) error {
 		return nil
 	}
 
-	// ---------- video (ffmpeg) ----------
+	/* ---------------- video via FFmpeg ---------------- */
+
 	go func() {
 		for {
 			cmd := exec.CommandContext(ctx, "ffmpeg",
