@@ -28,7 +28,7 @@ const (
 	gridH = 128
 
 	ledsPerFull = 170 // even universe
-	ledsPerHalf = 85  // odd  universe
+	ledsPerHalf = 89  // odd  universe
 	gapEven     = 0   // keep =0 because play.go uses 0 (the 6-px void is handled below)
 	missingOdd  = 0   // play.go value
 	ledsPerPair = ledsPerFull + ledsPerHalf
