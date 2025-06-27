@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Play, Square, Palette, Plus, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import type { FakerConfig } from "@/types/led-config"
+import type { FakerConfig, FakerMode } from "@/types/led-config"
 import { apiFetch } from "@/lib/api"
 
 export function FakerManager() {
@@ -149,7 +149,7 @@ export function FakerManager() {
               <Label htmlFor="mode">Pattern Mode</Label>
               <Select
                 value={config.mode}
-                onValueChange={(value: "solid" | "chase" | "fill") => setConfig((prev) => ({ ...prev, mode: value }))}
+                onValueChange={(value: FakerMode) => setConfig((prev) => ({ ...prev, mode: value }))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -158,6 +158,7 @@ export function FakerManager() {
                   <SelectItem value="solid">Solid</SelectItem>
                   <SelectItem value="chase">Chase</SelectItem>
                   <SelectItem value="fill">Fill</SelectItem>
+                  <SelectItem value="gradient">Gradient</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -194,7 +195,7 @@ export function FakerManager() {
               />
             </div>
 
-            {(config.mode === "chase" || config.mode === "fill") && (
+            {(config.mode === "chase" || config.mode === "fill" || config.mode === "gradient") && (
               <div>
                 <Label htmlFor="fps">FPS</Label>
                 <Input
@@ -227,84 +228,88 @@ export function FakerManager() {
           </div>
 
           {/* Color Controls */}
-          <div className="space-y-4">
-            <Label>RGB Color</Label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label>Red ({config.color[0]})</Label>
-                <Slider
-                  value={[config.color[0]]}
-                  onValueChange={([value]) => updateColor(0, value)}
-                  max={255}
-                  step={1}
-                  className="mt-2"
-                />
+          {config.mode !== "gradient" && (
+            <div className="space-y-4">
+              <Label>RGB Color</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Red ({config.color[0]})</Label>
+                  <Slider
+                    value={[config.color[0]]}
+                    onValueChange={([value]) => updateColor(0, value)}
+                    max={255}
+                    step={1}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label>Green ({config.color[1]})</Label>
+                  <Slider
+                    value={[config.color[1]]}
+                    onValueChange={([value]) => updateColor(1, value)}
+                    max={255}
+                    step={1}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label>Blue ({config.color[2]})</Label>
+                  <Slider
+                    value={[config.color[2]]}
+                    onValueChange={([value]) => updateColor(2, value)}
+                    max={255}
+                    step={1}
+                    className="mt-2"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Green ({config.color[1]})</Label>
-                <Slider
-                  value={[config.color[1]]}
-                  onValueChange={([value]) => updateColor(1, value)}
-                  max={255}
-                  step={1}
-                  className="mt-2"
-                />
-              </div>
-              <div>
-                <Label>Blue ({config.color[2]})</Label>
-                <Slider
-                  value={[config.color[2]]}
-                  onValueChange={([value]) => updateColor(2, value)}
-                  max={255}
-                  step={1}
-                  className="mt-2"
-                />
-              </div>
-            </div>
 
-            {/* Color Preview */}
-            <div className="flex items-center gap-4">
-              <div
-                className="w-16 h-8 border rounded"
-                style={{
-                  backgroundColor: `rgb(${config.color[0]}, ${config.color[1]}, ${config.color[2]})`,
-                }}
-              />
-              <span className="font-mono text-sm">
-                RGB({config.color[0]}, {config.color[1]}, {config.color[2]})
-              </span>
+              {/* Color Preview */}
+              <div className="flex items-center gap-4">
+                <div
+                  className="w-16 h-8 border rounded"
+                  style={{
+                    backgroundColor: `rgb(${config.color[0]}, ${config.color[1]}, ${config.color[2]})`,
+                  }}
+                />
+                <span className="font-mono text-sm">
+                  RGB({config.color[0]}, {config.color[1]}, {config.color[2]})
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Color Presets */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Color Presets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
-            {presetColors.map((preset) => (
-              <Button
-                key={preset.name}
-                variant="outline"
-                size="sm"
-                onClick={() => setConfig((prev) => ({ ...prev, color: preset.color }))}
-                className="h-16 flex flex-col gap-1"
-              >
-                <div
-                  className="w-6 h-3 rounded border"
-                  style={{
-                    backgroundColor: `rgb(${preset.color[0]}, ${preset.color[1]}, ${preset.color[2]})`,
-                  }}
-                />
-                <span className="text-xs">{preset.name}</span>
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {config.mode !== "gradient" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Color Presets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+              {presetColors.map((preset) => (
+                <Button
+                  key={preset.name}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfig((prev) => ({ ...prev, color: preset.color }))}
+                  className="h-16 flex flex-col gap-1"
+                >
+                  <div
+                    className="w-6 h-3 rounded border"
+                    style={{
+                      backgroundColor: `rgb(${preset.color[0]}, ${preset.color[1]}, ${preset.color[2]})`,
+                    }}
+                  />
+                  <span className="text-xs">{preset.name}</span>
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Multi-Range Configuration (Solid mode only) */}
       {config.mode === "solid" && (

@@ -19,18 +19,18 @@ var fake = &faker{}
 /* start / stop from REST */
 
 type fakerReq struct {
-	Mode       string   `json:"mode"` // "solid" | "chase"
+	Mode       string   `json:"mode"` // "solid" | "chase" | "fill" | "gradient"
 	From       uint32   `json:"from"`
 	To         uint32   `json:"to"`
-	Color      [3]uint8 `json:"color"`                // base colour
-	FPS        float64  `json:"fps,omitempty"`        // chase only
-	Brightness float64  `json:"brightness,omitempty"` // 0 - 1  (NEW)
+	Color      [3]uint8 `json:"color"`                // base colour (unused by gradient)
+	FPS        float64  `json:"fps,omitempty"`        // frame-rate for animated modes
+	Brightness float64  `json:"brightness,omitempty"` // 0 ≤ x ≤ 1 : global dimmer
 }
 
 func scale(col [3]uint8, br float64) RGB {
 	if br <= 0 || br > 1 {
 		br = 1
-	} // default = full
+	}
 	return RGB{
 		uint8(float64(col[0])*br + 0.5),
 		uint8(float64(col[1])*br + 0.5),
@@ -42,7 +42,7 @@ func (f *faker) start(r fakerReq) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// stop previous if any
+	/* stop previous pattern (if any) */
 	if f.cancel != nil {
 		f.cancel()
 	}
@@ -57,6 +57,8 @@ func (f *faker) start(r fakerReq) error {
 		go fakerChase(ctx, r)
 	case "fill":
 		go fakerFill(ctx, r)
+	case "gradient":
+		go fakerGradient(ctx, r)
 	default:
 		cancel()
 		return errors.New("unknown mode")
@@ -78,14 +80,14 @@ func (f *faker) stop() {
 func fakerSolid(ctx context.Context, req fakerReq) {
 	br := req.Brightness
 	if br <= 0 || br > 1 {
-		br = 1 // default = full
+		br = 1
 	}
-	col := scale(req.Color, req.Brightness)
+	col := scale(req.Color, br)
 	for i := req.From; i <= req.To; i++ {
 		ehubChan <- eHuBUpdate{EntityID: i, Color: col}
 	}
 
-	tick := time.NewTicker(2 * time.Second) // refresh in case something clears LEDs
+	tick := time.NewTicker(2 * time.Second) // refresh
 	defer tick.Stop()
 	for {
 		select {
@@ -102,9 +104,9 @@ func fakerSolid(ctx context.Context, req fakerReq) {
 func fakerChase(ctx context.Context, req fakerReq) {
 	br := req.Brightness
 	if br <= 0 || br > 1 {
-		br = 1 // default = full
+		br = 1
 	}
-	col := scale(req.Color, req.Brightness)
+	col := scale(req.Color, br)
 
 	off := RGB{0, 0, 0}
 	fps := req.FPS
@@ -121,7 +123,6 @@ func fakerChase(ctx context.Context, req fakerReq) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			// turn previous off
 			prev := cur - 1
 			if prev < req.From {
 				prev = req.To
